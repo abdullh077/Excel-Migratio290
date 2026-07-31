@@ -1,0 +1,932 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Visa Management System API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: umrah
+    description: Umrah pilgrims management
+  - name: visas
+    description: Other visas management
+  - name: dashboard
+    description: Dashboard statistics
+  - name: archive
+    description: Archive records
+  - name: users
+    description: User management
+  - name: settings
+    description: Office settings
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users (admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppUser"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppUser"
+
+  /users/{id}:
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /umrah:
+    get:
+      operationId: listUmrahClients
+      tags: [umrah]
+      summary: List all umrah clients
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: agent
+          in: query
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of umrah clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UmrahClient"
+    post:
+      operationId: createUmrahClient
+      tags: [umrah]
+      summary: Add a new umrah client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UmrahClientInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UmrahClient"
+
+  /umrah/{id}:
+    get:
+      operationId: getUmrahClient
+      tags: [umrah]
+      summary: Get a single umrah client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Umrah client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UmrahClient"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateUmrahClient
+      tags: [umrah]
+      summary: Update an umrah client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UmrahClientUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UmrahClient"
+    delete:
+      operationId: deleteUmrahClient
+      tags: [umrah]
+      summary: Delete an umrah client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /visas:
+    get:
+      operationId: listVisas
+      tags: [visas]
+      summary: List all other visas
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: visaType
+          in: query
+          schema:
+            type: string
+        - name: agent
+          in: query
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of visas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OtherVisa"
+    post:
+      operationId: createVisa
+      tags: [visas]
+      summary: Add a new visa record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtherVisaInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtherVisa"
+
+  /visas/{id}:
+    get:
+      operationId: getVisa
+      tags: [visas]
+      summary: Get a single visa record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Visa record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtherVisa"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateVisa
+      tags: [visas]
+      summary: Update a visa record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtherVisaUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtherVisa"
+    delete:
+      operationId: deleteVisa
+      tags: [visas]
+      summary: Delete a visa record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/monthly:
+    get:
+      operationId: getMonthlyStats
+      tags: [dashboard]
+      summary: Get monthly breakdown for charts
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonthlyStats"
+
+  /dashboard/agents:
+    get:
+      operationId: getAgentStats
+      tags: [dashboard]
+      summary: Get statistics grouped by agent
+      responses:
+        "200":
+          description: Agent stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentStats"
+
+  /dashboard/outstanding:
+    get:
+      operationId: getOutstandingBalances
+      tags: [dashboard]
+      summary: Get clients with outstanding balances
+      responses:
+        "200":
+          description: Outstanding balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutstandingBalance"
+
+  /archive:
+    get:
+      operationId: listArchive
+      tags: [archive]
+      summary: Get all records from the general archive
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: visaType
+          in: query
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Archive records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArchiveRecord"
+
+  /settings/office:
+    get:
+      operationId: getOfficeSettings
+      tags: [settings]
+      summary: Get office branding settings
+      responses:
+        "200":
+          description: Office settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfficeSettings"
+    put:
+      operationId: updateOfficeSettings
+      tags: [settings]
+      summary: Update office branding settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfficeSettingsUpdate"
+      responses:
+        "200":
+          description: Updated office settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfficeSettings"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    AuthUser:
+      type: object
+      required: [id, username, role]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+
+    AppUser:
+      type: object
+      required: [id, username, role, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+        createdAt:
+          type: string
+
+    UserInput:
+      type: object
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+
+    UmrahClient:
+      type: object
+      required: [id, clientName, passportNumber, phone, agent, issueDate, stayDuration, issuingAuthority, purchasePrice, salePrice, profit, sendStatus, status, createdAt]
+      properties:
+        id:
+          type: integer
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        stayDuration:
+          type: integer
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        profit:
+          type: number
+        sendStatus:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        entryDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    UmrahClientInput:
+      type: object
+      required: [clientName, passportNumber, phone, agent, issueDate, stayDuration, issuingAuthority, purchasePrice, salePrice, sendStatus]
+      properties:
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        stayDuration:
+          type: integer
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        sendStatus:
+          type: string
+        notes:
+          type: string
+        entryDate:
+          type: string
+
+    UmrahClientUpdate:
+      type: object
+      properties:
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        stayDuration:
+          type: integer
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        sendStatus:
+          type: string
+        notes:
+          type: string
+        entryDate:
+          type: string
+
+    OtherVisa:
+      type: object
+      required: [id, clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, issuingAuthority, purchasePrice, salePrice, receivedFromClient, clientBalance, transferredToAgent, agentBalance, profit, createdAt]
+      properties:
+        id:
+          type: integer
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        requestNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        visaType:
+          type: string
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        receivedFromClient:
+          type: number
+        clientBalance:
+          type: number
+        transferredToAgent:
+          type: number
+        agentBalance:
+          type: number
+        profit:
+          type: number
+        sendStatus:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    OtherVisaInput:
+      type: object
+      required: [clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, issuingAuthority, purchasePrice, salePrice, receivedFromClient, transferredToAgent]
+      properties:
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        requestNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        visaType:
+          type: string
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        receivedFromClient:
+          type: number
+        transferredToAgent:
+          type: number
+        sendStatus:
+          type: string
+        notes:
+          type: string
+
+    OtherVisaUpdate:
+      type: object
+      properties:
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        requestNumber:
+          type: string
+        phone:
+          type: string
+        agent:
+          type: string
+        issueDate:
+          type: string
+        visaType:
+          type: string
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        receivedFromClient:
+          type: number
+        transferredToAgent:
+          type: number
+        sendStatus:
+          type: string
+        notes:
+          type: string
+
+    DashboardStats:
+      type: object
+      required: [umrahTotal, umrahInsideKsa, umrahOutsideKsa, umrahTotalPurchase, umrahTotalSale, umrahTotalProfit, visasTotal, visasTotalProfit, visasTotalClientBalance, visasTotalAgentBalance, totalProfit]
+      properties:
+        umrahTotal:
+          type: integer
+        umrahInsideKsa:
+          type: integer
+        umrahOutsideKsa:
+          type: integer
+        umrahTotalPurchase:
+          type: number
+        umrahTotalSale:
+          type: number
+        umrahTotalProfit:
+          type: number
+        visasTotal:
+          type: integer
+        visasTotalProfit:
+          type: number
+        visasTotalClientBalance:
+          type: number
+        visasTotalAgentBalance:
+          type: number
+        totalProfit:
+          type: number
+
+    MonthlyStats:
+      type: object
+      required: [month, year, umrahCount, umrahPurchase, umrahSale, umrahProfit, visasCount, visasProfit]
+      properties:
+        month:
+          type: integer
+        year:
+          type: integer
+        umrahCount:
+          type: integer
+        umrahPurchase:
+          type: number
+        umrahSale:
+          type: number
+        umrahProfit:
+          type: number
+        visasCount:
+          type: integer
+        visasProfit:
+          type: number
+
+    AgentStats:
+      type: object
+      required: [agent, umrahCount, visasCount, totalProfit]
+      properties:
+        agent:
+          type: string
+        umrahCount:
+          type: integer
+        visasCount:
+          type: integer
+        totalProfit:
+          type: number
+
+    OutstandingBalance:
+      type: object
+      required: [id, clientName, phone, type, clientBalance, agentBalance]
+      properties:
+        id:
+          type: integer
+        clientName:
+          type: string
+        phone:
+          type: string
+        type:
+          type: string
+        clientBalance:
+          type: number
+        agentBalance:
+          type: number
+
+    ArchiveRecord:
+      type: object
+      required: [id, clientName, passportNumber, phone, issueDate, visaType, agent, issuingAuthority, purchasePrice, salePrice, profit, sourceTable]
+      properties:
+        id:
+          type: integer
+        clientName:
+          type: string
+        passportNumber:
+          type: string
+        phone:
+          type: string
+        issueDate:
+          type: string
+        visaType:
+          type: string
+        agent:
+          type: string
+        issuingAuthority:
+          type: string
+        purchasePrice:
+          type: number
+        salePrice:
+          type: number
+        receivedFromClient:
+          type: ["number", "null"]
+        clientBalance:
+          type: ["number", "null"]
+        transferredToAgent:
+          type: ["number", "null"]
+        agentBalance:
+          type: ["number", "null"]
+        profit:
+          type: number
+        sourceTable:
+          type: string
+        createdAt:
+          type: string
+
+    OfficeSettings:
+      type: object
+      required: [officeName, officePhone, officePhone2, officeAddress, whatsappUmrahTemplate, whatsappOtherTemplate, configured]
+      properties:
+        officeName:
+          type: string
+        officePhone:
+          type: string
+        officePhone2:
+          type: string
+        officeAddress:
+          type: string
+        whatsappUmrahTemplate:
+          type: string
+        whatsappOtherTemplate:
+          type: string
+        configured:
+          type: boolean
+
+    OfficeSettingsUpdate:
+      type: object
+      properties:
+        officeName:
+          type: string
+        officePhone:
+          type: string
+        officePhone2:
+          type: string
+        officeAddress:
+          type: string
+        whatsappUmrahTemplate:
+          type: string
+        whatsappOtherTemplate:
+          type: string
+        configured:
+          type: boolean

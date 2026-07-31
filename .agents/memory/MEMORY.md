@@ -1,0 +1,14 @@
+- [Visa Manager auth pattern](visa-manager-auth.md) — bcryptjs + pgcrypto both produce bcrypt hashes; React Query must have retry:false on 401 or auth check causes infinite spinner.
+- [Arabic RTL app setup](arabic-rtl-setup.md) — RTL apps need dir="rtl" on root, Tajawal font, and all layouts verified in RTL direction.
+- [Electron Windows cross-build](electron-win-cross-build.md) — electron-builder from Linux cross-compiles .exe but packages the Linux native binary; must inject Windows prebuild manually before packaging.
+- [Visa Manager distribution & licensing](visa-manager-distribution-model.md) — offline .exe (not SaaS); licensing REMOVED → login-gated time-limited accounts (expiresAt) enforced per-request; per-office branding; wa.me WhatsApp.
+- [api-server dev reload](api-server-dev-reload.md) — restart the api-server workflow after backend route edits; the watcher can serve stale code (symptom: drizzle 'No values to set' 500, stack line off-by-N).
+- [Electron clipboard menu](electron-clipboard-menu.md) — never set app menu to null; keep edit-roles menu hidden + context menu, or Ctrl+C/V dies on Windows.
+- [Trial expiry data purge](trial-purge.md) — expired UNACTIVATED trial wipes its data once (atomic, row-locked); never purge a paid license; trial is once-per-DB.
+- [Code-to-PDF with Arabic](code-pdf-arabic-fonts.md) — Pygments+fpdf2+reshaper+bidi; Arabic needs a font with presentation forms (Amiri yes, Tajawal/Noto no); exclude build output.
+- [Date parsing for counters](date-parsing-counters.md) — DB date strings vary in format; parse defensively and return null (hide counter) instead of NaN.
+- [Visa Manager multi-tenancy](visa-manager-multitenancy.md) — office-scoped isolation (officeId = owner id; subs inherit); legacy role "admin" is normalized to "provider" at login/auth.
+- [Session security baseline](session-security-baseline.md) — prod needs trust proxy + secure/lax cookie + session.regenerate on login; invisible in dev, fails audit in prod.
+- [Offline outbox + PWA](offline-outbox-pwa.md) — outbox uploads need clientRequestId idempotency; never SW-cache /api/auth/*; wipe persisted caches on login/logout.
+- [Agent statement](agent-statement.md) — agents link to transactions by text name (rename re-tags); balance = sales − paidFrom + paidTo; financials owner+provider only.
+- [Autoscale scheduled work](autoscale-scheduled-work.md) — no cron on autoscale; run "daily" jobs as a lazy once-per-day check on authenticated activity (e.g. daily backup on any provider request).
