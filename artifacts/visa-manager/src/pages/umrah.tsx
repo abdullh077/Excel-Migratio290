@@ -1,133 +1,412 @@
 import { useState } from "react";
-import { useListUmrahClients, useCreateUmrahClient, useUpdateUmrahClient, useDeleteUmrahClient, useListAgentNames, getListUmrahClientsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Pencil, Trash2, MessageCircle, Printer, LogIn } from "lucide-react";
-import { fmt, formatDate, daysRemaining, today } from "@/lib/utils";
-import { useGetOfficeSettings } from "@workspace/api-client-react";
+import { Plus, Search, Pencil, Trash2, MessageCircle, Printer } from "lucide-react";
+import { fmt, formatDate, parseDate, today } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+// NOTE: src/lib/outbox.ts is created by another agent; API: enqueue(kind, payload, label)
+import { enqueue } from "@/lib/outbox";
 
-type Client = any;
-const EMPTY: Client = { clientName: "", passportNumber: "", phone: "", agent: "", issueDate: today(), stayDuration: 30, issuingAuthority: "", transactionParty: "", purchasePrice: 0, salePrice: 0, sendStatus: "pending", notes: "" };
+type Umrah = any;
+
+const DEFAULT_TEMPLATE =
+  "السلام عليكم ورحمة الله،\nمن {office}.\nنذكّركم بقرب انتهاء مدة إقامة العمرة الخاصة بالمعتمر: {name}.\nالمتبقّي: {days} يوماً.\nنرجو التكرم بمراجعتنا لإتمام إجراءات المغادرة في الوقت المحدد.\nشاكرين لكم حسن تعاونكم.";
+
+const EMPTY = {
+  clientName: "",
+  passportNumber: "",
+  phone: "",
+  agent: "",
+  issueDate: today(),
+  stayDuration: 90,
+  entryDate: "",
+  issuingAuthority: "اليمن",
+  transactionParty: "",
+  sendStatus: "قيد الانتظار",
+  purchasePrice: 0,
+  salePrice: 0,
+  notes: "",
+};
+
+type Errors = Partial<Record<string, string>>;
+
+async function apiGet(url: string) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+// Counter: if entryDate, expiry = entryDate + 90 days; otherwise issueDate + stayDuration days.
+// difference rounded days vs local today at midnight. null if invalid.
+function computeDays(row: Umrah): number | null {
+  let expiry: Date | null = null;
+  if (row.entryDate) {
+    const e = parseDate(row.entryDate);
+    if (!e) return null;
+    expiry = new Date(e.getFullYear(), e.getMonth(), e.getDate() + 90);
+  } else {
+    const i = parseDate(row.issueDate);
+    if (!i) return null;
+    const dur = Number(row.stayDuration);
+    if (isNaN(dur)) return null;
+    expiry = new Date(i.getFullYear(), i.getMonth(), i.getDate() + dur);
+  }
+  if (!expiry || isNaN(expiry.getTime())) return null;
+  const now = new Date();
+  const midnightToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const midnightExpiry = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
+  return Math.round((midnightExpiry.getTime() - midnightToday.getTime()) / 86400000);
+}
 
 export default function UmrahPage() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [entryId, setEntryId] = useState<number | null>(null);
-  const [form, setForm] = useState<Client>(EMPTY);
+  const [form, setForm] = useState<Umrah>({ ...EMPTY });
   const [editing, setEditing] = useState<number | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: clients = [], isLoading } = useListUmrahClients({});
-  const { data: agentNames = [] } = useListAgentNames();
-  const { data: settings } = useGetOfficeSettings();
-  const create = useCreateUmrahClient({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListUmrahClientsQueryKey() }); setDialogOpen(false); } } });
-  const update = useUpdateUmrahClient({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListUmrahClientsQueryKey() }); setDialogOpen(false); } } });
-  const del = useDeleteUmrahClient({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListUmrahClientsQueryKey() }); setDeleteId(null); } } });
-  const setEntry = useUpdateUmrahClient({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListUmrahClientsQueryKey() }); setEntryId(null); toast({ title: "تم تسجيل الدخول" }); } } });
+  const listKey = ["umrah", search];
+  const { data: clients = [], isLoading } = useQuery<Umrah[]>({
+    queryKey: listKey,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      const qs = params.toString();
+      return apiGet(`/api/umrah${qs ? `?${qs}` : ""}`);
+    },
+  });
 
-  const filtered = clients.filter((c: Client) =>
-    !search || c.clientName.includes(search) || c.passportNumber.includes(search) || c.agent.includes(search)
-  );
+  const { data: agentNames = [] } = useQuery<string[]>({
+    queryKey: ["agent-names"],
+    queryFn: () => apiGet("/api/statement/agent-names"),
+    staleTime: 60000,
+  });
 
-  function openNew() { setForm({ ...EMPTY }); setEditing(null); setDialogOpen(true); }
-  function openEdit(c: Client) { setForm({ ...c }); setEditing(c.id); setDialogOpen(true); }
-  function handleSubmit() {
-    const { id, profit, status, createdAt, ...data } = form;
-    if (editing) { update.mutate({ id: editing, data }); }
-    else { create.mutate({ data: { ...data, clientRequestId: crypto.randomUUID() } }); }
+  const { data: settings } = useQuery<any>({
+    queryKey: ["office-settings"],
+    queryFn: () => apiGet("/api/settings/office"),
+  });
+
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ["umrah"] });
   }
 
-  function whatsappLink(c: Client) {
-    const template = settings?.whatsappUmrahTemplate ?? "مرحباً {name}، تأشيرة العمرة الخاصة بك جاهزة.";
-    const msg = template.replace("{name}", c.clientName).replace("{passport}", c.passportNumber);
-    const phone = c.phone.replace(/\D/g, "");
-    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  const create = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch("/api/umrah", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setDialogOpen(false);
+      toast({ title: "تم الحفظ بنجاح" });
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: any }) => {
+      const res = await fetch(`/api/umrah/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setDialogOpen(false);
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/umrah/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error(String(res.status));
+      return true;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "تم الحذف بنجاح" });
+    },
+  });
+
+  const patchStatus = useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: any }) => {
+      const res = await fetch(`/api/umrah/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    },
+    onSuccess: () => invalidate(),
+  });
+
+  function openNew() {
+    setForm({ ...EMPTY, issueDate: today() });
+    setEditing(null);
+    setErrors({});
+    setDialogOpen(true);
+  }
+
+  function openEdit(c: Umrah) {
+    setForm({
+      clientName: c.clientName ?? "",
+      passportNumber: c.passportNumber ?? "",
+      phone: c.phone ?? "",
+      agent: c.agent ?? "",
+      issueDate: c.issueDate ? String(c.issueDate).slice(0, 10) : today(),
+      stayDuration: c.stayDuration ?? 90,
+      entryDate: c.entryDate ? String(c.entryDate).slice(0, 10) : "",
+      issuingAuthority: c.issuingAuthority ?? "اليمن",
+      transactionParty: c.transactionParty ?? "",
+      sendStatus: c.sendStatus ?? "قيد الانتظار",
+      purchasePrice: c.purchasePrice ?? 0,
+      salePrice: c.salePrice ?? 0,
+      notes: c.notes ?? "",
+    });
+    setEditing(c.id);
+    setErrors({});
+    setDialogOpen(true);
+  }
+
+  function validate(): Errors {
+    const e: Errors = {};
+    if (!form.clientName?.trim()) e.clientName = "الاسم مطلوب";
+    if (!form.passportNumber?.trim()) e.passportNumber = "رقم الجواز مطلوب";
+    if (!form.phone?.trim()) e.phone = "رقم الجوال مطلوب";
+    if (!form.agent?.trim()) e.agent = "الوكيل مطلوب";
+    if (!form.issueDate?.trim()) e.issueDate = "تاريخ الإصدار مطلوب";
+    if (form.stayDuration === "" || form.stayDuration == null || isNaN(Number(form.stayDuration)))
+      e.stayDuration = "المدة مطلوبة";
+    if (!form.issuingAuthority?.trim()) e.issuingAuthority = "جهة الإصدار مطلوبة";
+    if (form.purchasePrice === "" || isNaN(Number(form.purchasePrice))) e.purchasePrice = "يجب أن يكون رقماً";
+    if (form.salePrice === "" || isNaN(Number(form.salePrice))) e.salePrice = "يجب أن يكون رقماً";
+    return e;
+  }
+
+  function handleSubmit() {
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
+    const payload: any = {
+      clientName: form.clientName,
+      passportNumber: form.passportNumber,
+      phone: form.phone,
+      agent: form.agent,
+      issueDate: form.issueDate,
+      stayDuration: Number(form.stayDuration),
+      entryDate: form.entryDate || null,
+      issuingAuthority: form.issuingAuthority,
+      transactionParty: form.transactionParty || "",
+      sendStatus: form.sendStatus,
+      purchasePrice: Number(form.purchasePrice),
+      salePrice: Number(form.salePrice),
+      notes: form.notes || "",
+    };
+
+    if (editing) {
+      update.mutate({ id: editing, payload });
+      return;
+    }
+
+    if (!navigator.onLine) {
+      enqueue("umrah", payload, form.clientName);
+      setDialogOpen(false);
+      toast({ title: "حُفظت مؤقتاً على الجهاز", description: "ستُرفع تلقائياً عند عودة الإنترنت" });
+      return;
+    }
+
+    create.mutate(payload);
+  }
+
+  function handleDelete(id: number) {
+    if (!window.confirm("هل أنت متأكد من حذف هذا السجل؟")) return;
+    remove.mutate(id);
+  }
+
+  function handleEntry(c: Umrah) {
+    patchStatus.mutate(
+      { id: c.id, payload: { entryDate: new Date().toISOString() } },
+      { onSuccess: () => toast({ title: "تم تسجيل دخول المملكة", description: "بدأ العدّ التنازلي لمدة 90 يوماً" }) }
+    );
+  }
+
+  function buildMessage(c: Umrah): string {
+    const officeName = settings?.officeName || "مكتبنا";
+    const tpl = (settings?.whatsappUmrahTemplate?.trim() || "") || DEFAULT_TEMPLATE;
+    const days = computeDays(c);
+    const daysStr = days == null ? "غير محدد" : String(days);
+    return tpl
+      .replace(/\{office\}/g, officeName)
+      .replace(/\{name\}/g, c.clientName ?? "")
+      .replace(/\{days\}/g, daysStr)
+      .replace(/\{[^}]*\}/g, "");
+  }
+
+  function handleWhatsApp(c: Umrah) {
+    const message = buildMessage(c);
+    const phone = String(c.phone ?? "").replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+    patchStatus.mutate({ id: c.id, payload: { sendStatus: "تم الإرسال" } });
   }
 
   return (
     <AppLayout>
       <div className="p-6" dir="rtl">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold">معتمرو العمرة</h1>
-          <Button onClick={openNew} size="sm" className="bg-primary"><Plus className="w-4 h-4 ml-1" />إضافة معتمر</Button>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-xl font-bold">عملاء العمرة</h1>
+            <p className="text-sm text-muted-foreground mt-1">إدارة بيانات المعتمرين وحالات التأشيرات الخاصة بهم.</p>
+          </div>
+          <Button onClick={openNew} size="sm">
+            <Plus className="w-4 h-4 ml-1" />
+            إضافة عميل جديد
+          </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative mb-4 max-w-sm">
+        <div className="relative my-4 max-w-sm">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pr-9" placeholder="بحث بالاسم أو جواز السفر أو الوكيل..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            className="pr-9"
+            placeholder="بحث بالاسم، الجواز، أو الجوال..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        {/* Table */}
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-xs">
                 <tr>
-                  <th className="px-4 py-3 text-right font-medium">العميل</th>
-                  <th className="px-4 py-3 text-right font-medium">جواز السفر</th>
-                  <th className="px-4 py-3 text-right font-medium">الوكيل</th>
-                  <th className="px-4 py-3 text-right font-medium">تاريخ الإصدار</th>
-                  <th className="px-4 py-3 text-right font-medium">الحالة</th>
-                  <th className="px-4 py-3 text-right font-medium">الأيام المتبقية</th>
-                  <th className="px-4 py-3 text-right font-medium">سعر البيع</th>
-                  <th className="px-4 py-3 text-right font-medium">الحالة</th>
-                  <th className="px-4 py-3 text-center font-medium">إجراءات</th>
+                  <th className="px-3 py-3 text-right font-medium">م</th>
+                  <th className="px-3 py-3 text-right font-medium">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium">الوكيل</th>
+                  <th className="px-3 py-3 text-right font-medium">الإصدار</th>
+                  <th className="px-3 py-3 text-right font-medium">الشراء</th>
+                  <th className="px-3 py-3 text-right font-medium">البيع</th>
+                  <th className="px-3 py-3 text-right font-medium">الربح</th>
+                  <th className="px-3 py-3 text-right font-medium">الإرسال</th>
+                  <th className="px-3 py-3 text-right font-medium">داخل المملكة</th>
+                  <th className="px-3 py-3 text-center font-medium">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">جاري التحميل...</td></tr>}
-                {!isLoading && filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">لا توجد سجلات</td></tr>}
-                {filtered.map((c: Client) => {
-                  const days = daysRemaining(c.entryDate, c.stayDuration);
-                  const inside = c.status === "داخل المملكة";
+                {isLoading && (
+                  <tr>
+                    <td colSpan={10} className="text-center py-8 text-muted-foreground">
+                      جاري التحميل...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && clients.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                      <div className="font-medium">لا يوجد معتمرون</div>
+                      <div className="text-xs mt-1">أضف أول معتمر بالضغط على زر «إضافة عميل جديد».</div>
+                    </td>
+                  </tr>
+                )}
+                {clients.map((c: Umrah, idx: number) => {
+                  const days = computeDays(c);
                   return (
                     <tr key={c.id} className="border-t hover:bg-muted/30">
-                      <td className="px-4 py-2 font-medium">{c.clientName}</td>
-                      <td className="px-4 py-2 text-muted-foreground" dir="ltr">{c.passportNumber}</td>
-                      <td className="px-4 py-2">{c.agent}</td>
-                      <td className="px-4 py-2">{formatDate(c.issueDate)}</td>
-                      <td className="px-4 py-2">
-                        <Badge variant={inside ? "default" : "secondary"} className={inside ? "bg-green-100 text-green-800 border-green-300" : "bg-gray-100 text-gray-600"}>
-                          {c.status}
-                        </Badge>
+                      <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{c.clientName}</div>
+                        <div className="text-xs text-muted-foreground" dir="ltr">
+                          {c.passportNumber} | {c.phone}
+                        </div>
                       </td>
-                      <td className="px-4 py-2 text-center">
-                        {days != null ? (
-                          <span className={days < 10 ? "text-red-600 font-bold" : ""}>{days} يوم</span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
+                      <td className="px-3 py-2">{c.agent}</td>
+                      <td className="px-3 py-2">
+                        <div>{formatDate(c.issueDate)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {c.stayDuration} يوم | {c.issuingAuthority}
+                        </div>
                       </td>
-                      <td className="px-4 py-2" dir="ltr">{fmt(c.salePrice)} ر.س</td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-2" dir="ltr">{fmt(c.purchasePrice)}</td>
+                      <td className="px-3 py-2" dir="ltr">{fmt(c.salePrice)}</td>
+                      <td className="px-3 py-2" dir="ltr">{fmt(c.profit)}</td>
+                      <td className="px-3 py-2">
                         <SendStatusBadge status={c.sendStatus} />
                       </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center justify-center gap-1">
-                          {!inside && (
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-green-700" title="تسجيل الدخول" onClick={() => setEntryId(c.id)}>
-                              <LogIn className="w-3.5 h-3.5" />
+                      <td className="px-3 py-2">
+                        {c.entryDate ? (
+                          <div>
+                            {days != null && (
+                              <CounterBadge days={days} />
+                            )}
+                            <div className="text-xs text-muted-foreground mt-1">دخل: {formatDate(c.entryDate)}</div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-start gap-1">
+                            <Badge variant="secondary" className="bg-gray-100 text-gray-600">خارج المملكة</Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs text-green-700"
+                              onClick={() => handleEntry(c)}
+                            >
+                              تسجيل الدخول
                             </Button>
-                          )}
-                          <a href={whatsappLink(c)} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-green-600"><MessageCircle className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            title="تعديل"
+                            onClick={() => openEdit(c)}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <a href={`/receipt/${c.id}?type=umrah`} title="طباعة سند">
+                            <Button variant="ghost" size="sm" className="h-7 px-2">
+                              <Printer className="w-3.5 h-3.5" />
+                            </Button>
                           </a>
-                          <Link href={`/receipt/umrah/${c.id}`}>
-                            <Button variant="ghost" size="sm" className="h-7 px-2"><Printer className="w-3.5 h-3.5" /></Button>
-                          </Link>
-                          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => openEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeleteId(c.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-green-600"
+                            title="تذكير واتساب"
+                            onClick={() => handleWhatsApp(c)}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-destructive"
+                            title="حذف"
+                            onClick={() => handleDelete(c.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -138,86 +417,115 @@ export default function UmrahPage() {
           </div>
         </div>
 
-        {/* Form Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-2xl" dir="rtl">
-            <DialogHeader><DialogTitle>{editing ? "تعديل معتمر" : "إضافة معتمر جديد"}</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>{editing ? "تعديل بيانات المعتمر" : "إضافة معتمر جديد"}</DialogTitle>
+            </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-2 max-h-[70vh] overflow-y-auto">
-              <Field label="اسم العميل" value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} required />
-              <Field label="رقم الجواز" value={form.passportNumber} onChange={(v) => setForm((f: any) => ({ ...f, passportNumber: v }))} ltr />
-              <Field label="رقم الهاتف" value={form.phone} onChange={(v) => setForm((f: any) => ({ ...f, phone: v }))} ltr />
-              <AgentField label="الوكيل" value={form.agent} onChange={(v) => setForm((f: any) => ({ ...f, agent: v }))} agentNames={agentNames as string[]} />
-              <Field label="تاريخ الإصدار" value={form.issueDate} onChange={(v) => setForm((f: any) => ({ ...f, issueDate: v }))} type="date" />
-              <Field label="مدة الإقامة (أيام)" value={String(form.stayDuration)} onChange={(v) => setForm((f: any) => ({ ...f, stayDuration: Number(v) }))} type="number" />
-              <Field label="جهة الإصدار" value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} />
-              <Field label="جهة المعاملة" value={form.transactionParty ?? ""} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
-              <Field label="سعر الشراء (ر.س)" value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: Number(v) }))} type="number" />
-              <Field label="سعر البيع (ر.س)" value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: Number(v) }))} type="number" />
+              <Field label="اسم العميل" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
+              <Field label="رقم الجواز" required ltr value={form.passportNumber} onChange={(v) => setForm((f: any) => ({ ...f, passportNumber: v }))} error={errors.passportNumber} />
+              <Field label="رقم الجوال" required ltr value={form.phone} onChange={(v) => setForm((f: any) => ({ ...f, phone: v }))} error={errors.phone} />
+              <div className="space-y-1.5">
+                <Label>الوكيل<span className="text-destructive mr-1">*</span></Label>
+                <Input
+                  list="agent-list-umrah"
+                  placeholder="اختر من الوكلاء أو اكتب اسماً"
+                  value={form.agent}
+                  onChange={(e) => setForm((f: any) => ({ ...f, agent: e.target.value }))}
+                />
+                <datalist id="agent-list-umrah">
+                  {(agentNames as string[]).map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+                {errors.agent && <p className="text-xs text-destructive">{errors.agent}</p>}
+              </div>
+              <Field label="تاريخ الإصدار" required type="date" value={form.issueDate} onChange={(v) => setForm((f: any) => ({ ...f, issueDate: v }))} error={errors.issueDate} />
+              <Field label="مدة الإقامة (يوم)" required type="number" value={String(form.stayDuration)} onChange={(v) => setForm((f: any) => ({ ...f, stayDuration: v === "" ? "" : Number(v) }))} error={errors.stayDuration} />
+              <Field label="تاريخ دخول المملكة (اختياري)" type="date" value={form.entryDate} onChange={(v) => setForm((f: any) => ({ ...f, entryDate: v }))} />
+              <Field label="جهة الإصدار" required value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} error={errors.issuingAuthority} />
+              <Field label="جهة المعاملة (تظهر في السند)" placeholder="اسم جهة المعاملة" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
               <div className="space-y-1.5">
                 <Label>حالة الإرسال</Label>
-                <select className="w-full border rounded-md px-3 py-2 text-sm bg-background" value={form.sendStatus} onChange={(e) => setForm((f: any) => ({ ...f, sendStatus: e.target.value }))}>
-                  <option value="pending">قيد الانتظار</option>
-                  <option value="sent">تم الإرسال</option>
-                  <option value="delivered">تم التسليم</option>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={form.sendStatus}
+                  onChange={(e) => setForm((f: any) => ({ ...f, sendStatus: e.target.value }))}
+                >
+                  <option value="قيد الانتظار">قيد الانتظار</option>
+                  <option value="تم الإرسال">تم الإرسال</option>
+                  <option value="تم التسليم">تم التسليم</option>
                 </select>
               </div>
-              <Field label="ملاحظات" value={form.notes ?? ""} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
+              <Field label="سعر الشراء" required type="number" min={0} value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: v === "" ? "" : Number(v) }))} error={errors.purchasePrice} />
+              <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
+              <Field label="ملاحظات" value={form.notes} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-              <Button onClick={handleSubmit} disabled={create.isPending || update.isPending}>حفظ</Button>
+              <Button onClick={handleSubmit} disabled={create.isPending || update.isPending}>حفظ البيانات</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Delete Confirm */}
-        <AlertDialog open={deleteId != null} onOpenChange={(o) => { if (!o) setDeleteId(null); }}>
-          <AlertDialogContent dir="rtl">
-            <AlertDialogHeader><AlertDialogTitle>تأكيد الحذف</AlertDialogTitle><AlertDialogDescription>هل أنت متأكد من حذف هذا السجل؟</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-white" onClick={() => del.mutate({ id: deleteId! })}>حذف</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Entry date confirm */}
-        <AlertDialog open={entryId != null} onOpenChange={(o) => { if (!o) setEntryId(null); }}>
-          <AlertDialogContent dir="rtl">
-            <AlertDialogHeader><AlertDialogTitle>تسجيل الدخول للمملكة</AlertDialogTitle><AlertDialogDescription>هل تريد تسجيل تاريخ الدخول الآن ({new Date().toLocaleDateString("ar-SA")})?</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction onClick={() => setEntry.mutate({ id: entryId!, data: { entryDate: new Date().toISOString() } })}>تأكيد</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </AppLayout>
   );
 }
 
+function CounterBadge({ days }: { days: number }) {
+  if (days <= 0) {
+    return <span className="text-red-600 font-bold text-sm">تجاوز {Math.abs(days)} يوم</span>;
+  }
+  if (days <= 10) {
+    return <span className="text-red-600 font-bold text-sm">متبقٍ {days} يوم</span>;
+  }
+  return <span className="text-green-600 font-bold text-sm">متبقٍ {days} يوم</span>;
+}
+
 function SendStatusBadge({ status }: { status: string }) {
-  if (status === "pending" || status === "قيد الانتظار") return <Badge variant="outline" className="text-xs">قيد الانتظار</Badge>;
-  if (status === "sent" || status === "تم الإرسال") return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">تم الإرسال</Badge>;
-  if (status === "delivered" || status === "تم التسليم") return <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">تم التسليم</Badge>;
-  return <Badge variant="outline" className="text-xs">{status}</Badge>;
+  if (status === "تم التسليم") return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">تم التسليم</Badge>;
+  if (status === "تم الإرسال") return <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-xs">تم الإرسال</Badge>;
+  return <Badge className="bg-gray-100 text-gray-600 border-gray-300 text-xs">قيد الانتظار</Badge>;
 }
 
-function Field({ label, value, onChange, type = "text", ltr = false, required = false }: { label: string; value: string; onChange: (v: string) => void; type?: string; ltr?: boolean; required?: boolean }) {
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  ltr = false,
+  required = false,
+  placeholder,
+  error,
+  min,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  ltr?: boolean;
+  required?: boolean;
+  placeholder?: string;
+  error?: string;
+  min?: number;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}{required && <span className="text-destructive mr-1">*</span>}</Label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} dir={ltr ? "ltr" : undefined} className={ltr ? "text-left" : ""} />
-    </div>
-  );
-}
-
-function AgentField({ label, value, onChange, agentNames }: { label: string; value: string; onChange: (v: string) => void; agentNames: string[] }) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <Input list="agent-list" value={value} onChange={(e) => onChange(e.target.value)} />
-      <datalist id="agent-list">{agentNames.map((n: string) => <option key={n} value={n} />)}</datalist>
+      <Label>
+        {label}
+        {required && <span className="text-destructive mr-1">*</span>}
+      </Label>
+      <Input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        min={min}
+        onChange={(e) => onChange(e.target.value)}
+        dir={ltr ? "ltr" : undefined}
+        className={ltr ? "text-left" : ""}
+      />
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

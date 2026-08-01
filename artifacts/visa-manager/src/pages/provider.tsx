@@ -1,41 +1,138 @@
 import { useState } from "react";
-import { useListAccounts, useCreateAccount, useDeleteAccount, useUpdateAccountExpiry, useUpdateAccountPassword, useUpdateAccountUsername, useGetMe, getListAccountsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Key, User, Calendar, Shield } from "lucide-react";
+import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+
+const ACCOUNTS_KEY = ["/api/provider/accounts"];
+const BACKUPS_KEY = ["/api/provider/backups"];
+
+async function fetchJson(url: string) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+async function postJson(url: string, body: any) {
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+async function patchJson(url: string, body: any) {
+  const res = await fetch(url, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+async function del(url: string) {
+  const res = await fetch(url, { method: "DELETE", credentials: "include" });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
 
 export default function ProviderPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: me } = useGetMe();
-  const { data: accounts = [] } = useListAccounts();
-  const [createOpen, setCreateOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [expiryId, setExpiryId] = useState<number | null>(null);
-  const [pwdId, setPwdId] = useState<number | null>(null);
-  const [usernameId, setUsernameId] = useState<number | null>(null);
-  const [form, setForm] = useState({ username: "", password: "", role: "owner", parentUserId: "", expiresAt: "" });
-  const [expiryVal, setExpiryVal] = useState("");
-  const [pwdVal, setPwdVal] = useState("");
-  const [usernameVal, setUsernameVal] = useState("");
-
-  const create = useCreateAccount({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }); setCreateOpen(false); setForm({ username: "", password: "", role: "owner", parentUserId: "", expiresAt: "" }); toast({ title: "تم إنشاء الحساب" }); } } });
-  const del = useDeleteAccount({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }); setDeleteId(null); } } });
-  const setExpiry = useUpdateAccountExpiry({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }); setExpiryId(null); toast({ title: "تم تحديث انتهاء الاشتراك" }); } } });
-  const setPwd = useUpdateAccountPassword({ mutation: { onSuccess: () => { setPwdId(null); setPwdVal(""); toast({ title: "تم تغيير كلمة المرور" }); } } });
-  const setUsername = useUpdateAccountUsername({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }); setUsernameId(null); setUsernameVal(""); toast({ title: "تم تغيير اسم المستخدم" }); } } });
+  const { data: accounts = [] } = useQuery({ queryKey: ACCOUNTS_KEY, queryFn: () => fetchJson("/api/provider/accounts") });
 
   const owners = accounts.filter((a: any) => a.role === "owner");
   const subs = accounts.filter((a: any) => a.role === "sub");
+
+  // dialogs
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+  const [renameId, setRenameId] = useState<number | null>(null);
+  const [pwdId, setPwdId] = useState<number | null>(null);
+  const [expiryId, setExpiryId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  // form state
+  const [ownerForm, setOwnerForm] = useState({ username: "", password: "", customDate: false, expiresAt: "" });
+  const [subForm, setSubForm] = useState({ parentUserId: "", username: "", password: "", customDate: false });
+  const [renameVal, setRenameVal] = useState("");
+  const [pwdVal, setPwdVal] = useState("");
+  const [expiryVal, setExpiryVal] = useState("");
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+
+  const createOwner = useMutation({
+    mutationFn: () => postJson("/api/provider/owners", {
+      username: ownerForm.username,
+      password: ownerForm.password,
+      expiresAt: ownerForm.customDate && ownerForm.expiresAt ? ownerForm.expiresAt : null,
+    }),
+    onSuccess: () => {
+      invalidate();
+      setOwnerOpen(false);
+      setOwnerForm({ username: "", password: "", customDate: false, expiresAt: "" });
+      toast({ title: "تم إنشاء حساب المكتب" });
+    },
+  });
+
+  const createSub = useMutation({
+    mutationFn: () => postJson("/api/provider/subs", {
+      parentId: subForm.parentUserId ? Number(subForm.parentUserId) : undefined,
+      username: subForm.username,
+      password: subForm.password,
+    }),
+    onSuccess: () => {
+      invalidate();
+      setSubOpen(false);
+      setSubForm({ parentUserId: "", username: "", password: "", customDate: false });
+      toast({ title: "تم إنشاء الحساب الفرعي" });
+    },
+  });
+
+  const renameMut = useMutation({
+    mutationFn: () => patchJson(`/api/provider/accounts/${renameId}/username`, { username: renameVal }),
+    onSuccess: () => { invalidate(); setRenameId(null); setRenameVal(""); toast({ title: "تم تغيير الاسم" }); },
+  });
+
+  const pwdMut = useMutation({
+    mutationFn: () => patchJson(`/api/provider/accounts/${pwdId}/password`, { password: pwdVal }),
+    onSuccess: () => { setPwdId(null); setPwdVal(""); toast({ title: "تم تغيير كلمة المرور" }); },
+  });
+
+  const expiryMut = useMutation({
+    mutationFn: () => patchJson(`/api/provider/accounts/${expiryId}/expiry`, { expiresAt: expiryVal || null }),
+    onSuccess: () => { invalidate(); setExpiryId(null); setExpiryVal(""); },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => del(`/api/provider/accounts/${deleteId}`),
+    onSuccess: () => { invalidate(); setDeleteId(null); },
+  });
+
+  // Backups
+  const { data: backups = [] } = useQuery({ queryKey: BACKUPS_KEY, queryFn: () => fetchJson("/api/provider/backups") });
+  const backupMut = useMutation({
+    mutationFn: () => postJson("/api/provider/backup", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: BACKUPS_KEY });
+      toast({ title: "تم حفظ النسخة الاحتياطية بنجاح" });
+    },
+    onError: () => toast({ title: "تعذّر أخذ النسخة", variant: "destructive" }),
+  });
 
   function isExpired(a: any) {
     return a.expiresAt && new Date(a.expiresAt) < new Date();
@@ -44,157 +141,220 @@ export default function ProviderPage() {
   return (
     <AppLayout>
       <div className="p-6" dir="rtl">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold">إدارة الحسابات</h1>
-          <Button onClick={() => setCreateOpen(true)} size="sm" className="bg-primary"><Plus className="w-4 h-4 ml-1" />إنشاء حساب</Button>
-        </div>
+        <h1 className="text-xl font-bold mb-6">إدارة المزوّد</h1>
 
-        {/* Provider "My Account" card */}
-        {me && (
-          <Card className="p-4 mb-6 bg-primary/5 border-primary/20">
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-primary" />
-              <div>
-                <p className="font-semibold text-sm">حسابي — {me.username}</p>
-                <p className="text-xs text-muted-foreground">دور: {me.role === "provider" ? "مزود الخدمة" : me.role === "owner" ? "مالك مكتب" : "موظف"}</p>
-                {me.expiresAt && <p className="text-xs text-orange-600">ينتهي في: {formatDate(me.expiresAt)}</p>}
-                {!me.expiresAt && <p className="text-xs text-green-600">اشتراك غير محدود</p>}
-              </div>
+        <Tabs defaultValue="owners">
+          <TabsList>
+            <TabsTrigger value="owners">الحسابات الرئيسية</TabsTrigger>
+            <TabsTrigger value="subs">الحسابات الفرعية</TabsTrigger>
+            <TabsTrigger value="backup">النسخ الاحتياطي</TabsTrigger>
+          </TabsList>
+
+          {/* Owners */}
+          <TabsContent value="owners">
+            <div className="flex items-start justify-between mb-4 gap-4">
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                كل مكتب له حساب رئيسي واشتراك بمدة محددة. الحسابات الفرعية تتبع اشتراكه وتُدار من تبويبها الخاص.
+              </p>
+              <Button size="sm" onClick={() => setOwnerOpen(true)}><Plus className="w-4 h-4 ml-1" />مكتب جديد</Button>
             </div>
-          </Card>
-        )}
-
-        {/* Owners Table */}
-        <Card className="p-4 mb-6">
-          <h2 className="font-semibold mb-3">المكاتب (مالكو الحسابات) — {owners.length}</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b">
-                <tr>
-                  <th className="pb-2 text-right font-medium">المستخدم</th>
-                  <th className="pb-2 text-right font-medium">المكتب</th>
-                  <th className="pb-2 text-right font-medium">تاريخ الإنشاء</th>
-                  <th className="pb-2 text-right font-medium">انتهاء الاشتراك</th>
-                  <th className="pb-2 text-right font-medium">الحالة</th>
-                  <th className="pb-2 text-center font-medium">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {owners.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-muted-foreground text-xs">لا توجد مكاتب</td></tr>}
-                {owners.map((a: any) => (
-                  <tr key={a.id} className="border-b hover:bg-muted/30">
-                    <td className="py-2 font-medium" dir="ltr">{a.username}</td>
-                    <td className="py-2">{a.officeName ?? "—"}</td>
-                    <td className="py-2 text-xs">{formatDate(a.createdAt)}</td>
-                    <td className="py-2 text-xs">{a.expiresAt ? formatDate(a.expiresAt) : <span className="text-green-600">غير محدود</span>}</td>
-                    <td className="py-2">
-                      {isExpired(a) ? <Badge className="bg-red-100 text-red-800 text-xs">منتهي</Badge> : <Badge className="bg-green-100 text-green-800 text-xs">نشط</Badge>}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير الانتهاء" onClick={() => { setExpiryId(a.id); setExpiryVal(a.expiresAt ? a.expiresAt.slice(0, 10) : ""); }}><Calendar className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير اسم المستخدم" onClick={() => { setUsernameId(a.id); setUsernameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير كلمة المرور" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        {/* Subs */}
-        {subs.length > 0 && (
-          <Card className="p-4">
-            <h2 className="font-semibold mb-3">الموظفون (حسابات فرعية) — {subs.length}</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground border-b">
-                  <tr>
-                    <th className="pb-2 text-right font-medium">المستخدم</th>
-                    <th className="pb-2 text-right font-medium">تابع لـ</th>
-                    <th className="pb-2 text-center font-medium">إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subs.map((a: any) => {
-                    const owner = accounts.find((o: any) => o.id === a.parentUserId);
-                    return (
+            <Card className="p-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground border-b">
+                    <tr>
+                      <th className="pb-2 text-right font-medium">اسم المستخدم</th>
+                      <th className="pb-2 text-right font-medium">المكتب</th>
+                      <th className="pb-2 text-right font-medium">تاريخ الإنشاء</th>
+                      <th className="pb-2 text-right font-medium">تاريخ الانتهاء</th>
+                      <th className="pb-2 text-right font-medium">الحالة</th>
+                      <th className="pb-2 text-center font-medium">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {owners.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-muted-foreground text-xs">لا توجد حسابات</td></tr>}
+                    {owners.map((a: any) => (
                       <tr key={a.id} className="border-b hover:bg-muted/30">
                         <td className="py-2 font-medium" dir="ltr">{a.username}</td>
-                        <td className="py-2 text-sm text-muted-foreground">{owner?.username ?? a.parentUserId}</td>
+                        <td className="py-2">{a.officeName ?? "—"}</td>
+                        <td className="py-2 text-xs">{formatDate(a.createdAt)}</td>
+                        <td className="py-2 text-xs">{a.expiresAt ? formatDate(a.expiresAt) : <span className="text-green-600">غير محدود</span>}</td>
+                        <td className="py-2">
+                          {isExpired(a) ? <Badge className="bg-red-100 text-red-800 text-xs">منتهي</Badge> : <Badge className="bg-green-100 text-green-800 text-xs">نشط</Badge>}
+                        </td>
                         <td className="py-2">
                           <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setUsernameId(a.id); setUsernameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير الاسم" onClick={() => { setRenameId(a.id); setRenameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير كلمة المرور" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تاريخ الانتهاء" onClick={() => { setExpiryId(a.id); setExpiryVal(a.expiresAt ? String(a.expiresAt).slice(0, 10) : ""); }}><Calendar className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" title="حذف المكتب" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </TabsContent>
 
-        {/* Create Dialog */}
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          {/* Subs */}
+          <TabsContent value="subs">
+            <div className="flex items-center justify-end mb-4">
+              <Button size="sm" onClick={() => setSubOpen(true)}><Plus className="w-4 h-4 ml-1" />حساب فرعي جديد</Button>
+            </div>
+            <Card className="p-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground border-b">
+                    <tr>
+                      <th className="pb-2 text-right font-medium">اسم المستخدم</th>
+                      <th className="pb-2 text-right font-medium">يتبع الحساب الرئيسي</th>
+                      <th className="pb-2 text-center font-medium">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subs.length === 0 && <tr><td colSpan={3} className="text-center py-6 text-muted-foreground text-xs">لا توجد حسابات</td></tr>}
+                    {subs.map((a: any) => {
+                      const owner = accounts.find((o: any) => o.id === a.parentUserId);
+                      return (
+                        <tr key={a.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 font-medium" dir="ltr">{a.username}</td>
+                          <td className="py-2 text-sm text-muted-foreground">{owner?.username ?? a.parentUserId}</td>
+                          <td className="py-2">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير الاسم" onClick={() => { setRenameId(a.id); setRenameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير كلمة المرور" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" title="حذف المكتب" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Backup */}
+          <TabsContent value="backup">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="p-5 space-y-3">
+                <h2 className="font-semibold">النسخ الاحتياطي والاستعادة</h2>
+                <p className="text-sm text-muted-foreground">احفظ نسخة من بياناتك في مكان آمن، أو استعد نسخة سابقة عند الحاجة.</p>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => backupMut.mutate()} disabled={backupMut.isPending}>
+                    <DatabaseBackup className="w-4 h-4 ml-1" />أخذ نسخة احتياطية
+                  </Button>
+                  <Button size="sm" variant="outline">استعادة</Button>
+                </div>
+                {backups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">لا توجد نسخ بعد — ستُنشأ أول نسخة تلقائياً.</p>
+                ) : (
+                  <ul className="divide-y border rounded-md">
+                    {backups.map((b: { name: string; size?: number; createdAt?: string }) => (
+                      <li key={b.name} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span dir="ltr" className="truncate">{b.name}</span>
+                        <a href={`/api/provider/backups/${encodeURIComponent(b.name)}`} download className="text-primary inline-flex items-center gap-1 text-xs">
+                          <Download className="w-3.5 h-3.5" />تحميل
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+
+              <Card className="p-5 space-y-3">
+                <h2 className="font-semibold">النسخ الاحتياطي</h2>
+                <p className="text-sm text-muted-foreground">نسخة تلقائية تُحفظ يومياً عند أول دخول لك، وتقدر تنشئ نسخة الآن أو تحمّل أي نسخة سابقة.</p>
+                <Button size="sm" onClick={() => backupMut.mutate()} disabled={backupMut.isPending}>
+                  <DatabaseBackup className="w-4 h-4 ml-1" />نسخة احتياطية الآن
+                </Button>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Create Owner Dialog */}
+        <Dialog open={ownerOpen} onOpenChange={setOwnerOpen}>
           <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>إنشاء حساب جديد</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>مكتب جديد (حساب رئيسي)</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label>اسم المستخدم</Label>
-                <Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} dir="ltr" className="text-left" />
+                <Input value={ownerForm.username} onChange={(e) => setOwnerForm((f) => ({ ...f, username: e.target.value }))} dir="ltr" className="text-left" />
               </div>
               <div className="space-y-1.5">
                 <Label>كلمة المرور</Label>
-                <Input type="text" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} dir="ltr" className="text-left" />
+                <Input type="text" value={ownerForm.password} onChange={(e) => setOwnerForm((f) => ({ ...f, password: e.target.value }))} dir="ltr" className="text-left" />
               </div>
-              <div className="space-y-1.5">
-                <Label>نوع الحساب</Label>
-                <select className="w-full border rounded-md px-3 py-2 text-sm bg-background" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-                  <option value="owner">مكتب (مالك)</option>
-                  <option value="sub">موظف (فرعي)</option>
-                </select>
-              </div>
-              {form.role === "sub" && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={ownerForm.customDate} onChange={(e) => setOwnerForm((f) => ({ ...f, customDate: e.target.checked }))} />
+                تاريخ مخصص
+              </label>
+              {ownerForm.customDate && (
                 <div className="space-y-1.5">
-                  <Label>تابع للمكتب</Label>
-                  <select className="w-full border rounded-md px-3 py-2 text-sm bg-background" value={form.parentUserId} onChange={(e) => setForm((f) => ({ ...f, parentUserId: e.target.value }))}>
-                    <option value="">اختر مكتباً...</option>
-                    {owners.map((o: any) => <option key={o.id} value={o.id}>{o.username} {o.officeName ? `— ${o.officeName}` : ""}</option>)}
-                  </select>
-                </div>
-              )}
-              {form.role === "owner" && (
-                <div className="space-y-1.5">
-                  <Label>تاريخ انتهاء الاشتراك (اتركه فارغاً لغير محدود)</Label>
-                  <Input type="date" value={form.expiresAt} onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))} dir="ltr" className="text-left" />
+                  <Label>تاريخ الانتهاء</Label>
+                  <Input type="date" value={ownerForm.expiresAt} onChange={(e) => setOwnerForm((f) => ({ ...f, expiresAt: e.target.value }))} dir="ltr" className="text-left" />
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>إلغاء</Button>
-              <Button onClick={() => create.mutate({ data: { username: form.username, password: form.password, role: form.role as any, parentUserId: form.parentUserId ? Number(form.parentUserId) : undefined, expiresAt: form.expiresAt || null } as any })} disabled={create.isPending}>إنشاء</Button>
+              <Button variant="outline" onClick={() => setOwnerOpen(false)}>إلغاء</Button>
+              <Button onClick={() => createOwner.mutate()} disabled={createOwner.isPending}>إنشاء الحساب</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Expiry Dialog */}
-        <Dialog open={expiryId != null} onOpenChange={(o) => { if (!o) setExpiryId(null); }}>
+        {/* Create Sub Dialog */}
+        <Dialog open={subOpen} onOpenChange={setSubOpen}>
           <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>تحديث انتهاء الاشتراك</DialogTitle></DialogHeader>
-            <div className="space-y-2 py-2">
-              <Label>تاريخ الانتهاء (اتركه فارغاً لغير محدود)</Label>
-              <Input type="date" value={expiryVal} onChange={(e) => setExpiryVal(e.target.value)} dir="ltr" className="text-left" />
+            <DialogHeader>
+              <DialogTitle>حساب فرعي جديد</DialogTitle>
+              <DialogDescription>
+                الحساب الفرعي يشارك نفس بيانات المكتب الذي يتبعه، وينتهي اشتراكه مع الحساب الرئيسي في نفس اللحظة.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label>يتبع الحساب الرئيسي</Label>
+                <select className="w-full border rounded-md px-3 py-2 text-sm bg-background" value={subForm.parentUserId} onChange={(e) => setSubForm((f) => ({ ...f, parentUserId: e.target.value }))}>
+                  <option value="">اختر المكتب</option>
+                  {owners.map((o: any) => <option key={o.id} value={o.id}>{o.username}{o.officeName ? ` — ${o.officeName}` : ""}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>اسم المستخدم</Label>
+                <Input value={subForm.username} onChange={(e) => setSubForm((f) => ({ ...f, username: e.target.value }))} dir="ltr" className="text-left" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>كلمة المرور</Label>
+                <Input type="text" value={subForm.password} onChange={(e) => setSubForm((f) => ({ ...f, password: e.target.value }))} dir="ltr" className="text-left" />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={subForm.customDate} onChange={(e) => setSubForm((f) => ({ ...f, customDate: e.target.checked }))} />
+                تاريخ مخصص
+              </label>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setExpiryId(null)}>إلغاء</Button>
-              <Button onClick={() => setExpiry.mutate({ id: expiryId!, data: { expiresAt: expiryVal || null } as any })} disabled={setExpiry.isPending}>حفظ</Button>
+              <Button variant="outline" onClick={() => setSubOpen(false)}>إلغاء</Button>
+              <Button onClick={() => createSub.mutate()} disabled={createSub.isPending}>إنشاء الحساب</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rename Dialog */}
+        <Dialog open={renameId != null} onOpenChange={(o) => { if (!o) setRenameId(null); }}>
+          <DialogContent dir="rtl">
+            <DialogHeader><DialogTitle>تغيير الاسم</DialogTitle></DialogHeader>
+            <div className="space-y-2 py-2">
+              <Label>اسم المستخدم</Label>
+              <Input value={renameVal} onChange={(e) => setRenameVal(e.target.value)} dir="ltr" className="text-left" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenameId(null)}>إلغاء</Button>
+              <Button onClick={() => renameMut.mutate()} disabled={renameMut.isPending || !renameVal}>حفظ</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -204,27 +364,27 @@ export default function ProviderPage() {
           <DialogContent dir="rtl">
             <DialogHeader><DialogTitle>تغيير كلمة المرور</DialogTitle></DialogHeader>
             <div className="space-y-2 py-2">
-              <Label>كلمة المرور الجديدة</Label>
+              <Label>كلمة المرور</Label>
               <Input type="text" value={pwdVal} onChange={(e) => setPwdVal(e.target.value)} dir="ltr" className="text-left" />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setPwdId(null)}>إلغاء</Button>
-              <Button onClick={() => setPwd.mutate({ id: pwdId!, data: { password: pwdVal } })} disabled={setPwd.isPending || !pwdVal}>حفظ</Button>
+              <Button onClick={() => pwdMut.mutate()} disabled={pwdMut.isPending || !pwdVal}>حفظ</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Username Dialog */}
-        <Dialog open={usernameId != null} onOpenChange={(o) => { if (!o) setUsernameId(null); }}>
+        {/* Expiry Dialog */}
+        <Dialog open={expiryId != null} onOpenChange={(o) => { if (!o) setExpiryId(null); }}>
           <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>تغيير اسم المستخدم</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>تاريخ الانتهاء</DialogTitle></DialogHeader>
             <div className="space-y-2 py-2">
-              <Label>اسم المستخدم الجديد</Label>
-              <Input type="text" value={usernameVal} onChange={(e) => setUsernameVal(e.target.value)} dir="ltr" className="text-left" />
+              <Label>تاريخ الانتهاء</Label>
+              <Input type="date" value={expiryVal} onChange={(e) => setExpiryVal(e.target.value)} dir="ltr" className="text-left" />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setUsernameId(null)}>إلغاء</Button>
-              <Button onClick={() => setUsername.mutate({ id: usernameId!, data: { username: usernameVal } })} disabled={setUsername.isPending || !usernameVal}>حفظ</Button>
+              <Button variant="outline" onClick={() => setExpiryId(null)}>إلغاء</Button>
+              <Button onClick={() => expiryMut.mutate()} disabled={expiryMut.isPending}>حفظ</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -232,10 +392,13 @@ export default function ProviderPage() {
         {/* Delete Confirm */}
         <AlertDialog open={deleteId != null} onOpenChange={(o) => { if (!o) setDeleteId(null); }}>
           <AlertDialogContent dir="rtl">
-            <AlertDialogHeader><AlertDialogTitle>تأكيد الحذف</AlertDialogTitle><AlertDialogDescription>هل أنت متأكد من حذف هذا الحساب؟ سيتم حذف جميع بياناته.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogHeader>
+              <AlertDialogTitle>حذف المكتب</AlertDialogTitle>
+              <AlertDialogDescription>هل أنت متأكد من حذف هذا الحساب؟ سيتم حذف جميع بياناته.</AlertDialogDescription>
+            </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-white" onClick={() => del.mutate({ id: deleteId! })}>حذف</AlertDialogAction>
+              <AlertDialogAction className="bg-destructive text-white" onClick={() => deleteMut.mutate()}>حذف</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

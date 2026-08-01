@@ -14,4 +14,5 @@
 - [Autoscale scheduled work](autoscale-scheduled-work.md) — no cron on autoscale; run "daily" jobs as a lazy once-per-day check on authenticated activity (e.g. daily backup on any provider request).
 - [Generated hooks pattern](orval-generated-hooks.md) — mutations are export const (not export function); UseQueryOptions requires queryKey in v5; pass queryKey from getXQueryKey() when using enabled option.
 - [Dashboard defensive arrays](dashboard-defensive.md) — always wrap API array responses with Array.isArray() guard; stale production api-server can return objects instead of arrays during partial deploys.
+- [Original bundle recovery](original-bundle-recovery.md) — visa-manager UI/API contract restored verbatim from production bundle; specs in .recovery/specs/ are source of truth; plain fetch, not orval.
 - [api-server rebuild 2026-08](api-server-rebuild-2026-08.md) — full rebuild: auth, umrah, visas, dashboard, archive, settings, provider, statement, vouchers routes; dist/ compiled; needs workflow registration to go live in dev.

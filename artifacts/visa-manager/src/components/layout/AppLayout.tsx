@@ -1,101 +1,295 @@
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import { useLogout, useGetMe } from "@workspace/api-client-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { LogOut, LayoutDashboard, Users, FileText, Archive, BookOpen, Receipt, Settings, UserCog, ChevronRight } from "lucide-react";
+import {
+  LogOut,
+  LayoutDashboard,
+  Users,
+  FileText,
+  Archive,
+  Building2,
+  Wallet,
+  UserCog,
+  Menu,
+  X,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useGetMe } from "@/hooks/useAuth";
+import { apiRequest, clearClientCaches } from "@/lib/api";
+import { subscribe as outboxSubscribe, outboxCount, flush } from "@/lib/outbox";
 
-const navItems = [
-  { href: "/", label: "لوحة المؤشرات", icon: LayoutDashboard, roles: ["provider", "owner", "sub"] },
-  { href: "/umrah", label: "معتمرو العمرة", icon: Users, roles: ["provider", "owner", "sub"] },
-  { href: "/visas", label: "التأشيرات الأخرى", icon: FileText, roles: ["provider", "owner", "sub"] },
-  { href: "/archive", label: "الأرشيف العام", icon: Archive, roles: ["provider", "owner", "sub"] },
-  { href: "/statement", label: "كشف الحساب", icon: BookOpen, roles: ["provider", "owner"] },
-  { href: "/vouchers", label: "السندات", icon: Receipt, roles: ["provider", "owner"] },
-  { href: "/office", label: "إعدادات المكتب", icon: Settings, roles: ["provider", "owner", "sub"] },
-  { href: "/provider", label: "إدارة الحسابات", icon: UserCog, roles: ["provider"] },
-];
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+function buildNav(role: string | undefined): NavItem[] {
+  const base: NavItem[] = [
+    { href: "/", label: "لوحة القيادة", icon: LayoutDashboard },
+    { href: "/umrah", label: "عملاء العمرة", icon: Users },
+    { href: "/visas", label: "تأشيرات أخرى", icon: FileText },
+    { href: "/archive", label: "الأرشيف العام", icon: Archive },
+  ];
+  if (role === "owner" || role === "provider") {
+    base.push({ href: "/office", label: "بيانات المكتب", icon: Building2 });
+    base.push({ href: "/statement", label: "كشف الحساب", icon: Wallet });
+  }
+  if (role === "provider") {
+    base.push({ href: "/provider", label: "إدارة المزوّد", icon: UserCog });
+  }
+  return base;
+}
+
+function roleLabel(role: string | undefined): string {
+  if (role === "provider") return "المزوّد";
+  if (role === "owner") return "الحساب الرئيسي";
+  return "حساب فرعي";
+}
+
+// --------------------------------------------------------------------------
+// Offline / outbox banner
+// --------------------------------------------------------------------------
+function useOutboxCount(): number {
+  return useSyncExternalStore(
+    (cb) => outboxSubscribe(cb),
+    () => outboxCount(),
+    () => 0,
+  );
+}
+
+function OfflineBanner() {
+  const { toast } = useToast();
+  const count = useOutboxCount();
+  const [online, setOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  const [uploading, setUploading] = useState(false);
+
+  const runFlush = async () => {
+    setUploading(true);
+    try {
+      const { uploaded, failed } = await flush();
+      if (uploaded > 0) {
+        toast({ description: `تم رفع ${uploaded} معاملة معلّقة بنجاح` });
+      }
+      failed.forEach((f) => {
+        toast({
+          variant: "destructive",
+          title: `تعذر رفع: ${f.label}`,
+          description: f.error,
+        });
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    const goOnline = () => {
+      setOnline(true);
+      void runFlush();
+    };
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    // Attempt an immediate flush on mount.
+    void runFlush();
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (online && count === 0) return null;
+
+  if (!online) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2 text-sm bg-destructive/10 text-destructive border-b border-destructive/20">
+        <span>
+          لا يوجد اتصال بالإنترنت — يمكنك متابعة العمل، وستُرفع المعاملات الجديدة
+          تلقائياً عند عودة الاتصال.
+          {count > 0 ? ` (${count} بانتظار الرفع)` : ""}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-50 text-amber-900 border-b border-amber-200">
+      {uploading ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>جارٍ رفع المعاملات المعلّقة...</span>
+        </>
+      ) : (
+        <span>{count} معاملة بانتظار الرفع</span>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 mr-auto"
+        onClick={() => void runFlush()}
+        disabled={uploading}
+      >
+        <RefreshCw className="w-3.5 h-3.5 ml-1" />
+        رفع الآن
+      </Button>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------
+// Sidebar
+// --------------------------------------------------------------------------
+function Sidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: user } = useGetMe();
-  const logout = useLogout({
-    mutation: {
-      onSuccess: () => {
-        queryClient.clear();
-        localStorage.removeItem("oboor-query-cache-v1");
-        window.location.href = "/login";
-      },
+  const role = user?.role;
+  const nav = buildNav(role);
+
+  const logout = useMutation({
+    mutationFn: () =>
+      apiRequest("/api/auth/logout", { method: "POST" }),
+    onSuccess: async () => {
+      await clearClientCaches();
+      queryClient.clear();
+      onClose();
+      setLocation("/login");
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "خطأ",
+        description: "حدث خطأ أثناء تسجيل الخروج",
+      });
     },
   });
 
-  const role = user?.role ?? "sub";
-  const visibleNav = navItems.filter((n) => n.roles.includes(role));
-
   return (
-    <div dir="rtl" className="flex h-screen overflow-hidden bg-background font-sans">
-      {/* Sidebar */}
-      <aside className="w-60 flex-shrink-0 bg-sidebar text-sidebar-foreground flex flex-col border-l border-sidebar-border">
-        {/* Logo */}
-        <div className="p-5 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <img src="/favicon.svg" alt="عبور" className="w-8 h-8" onError={(e) => (e.currentTarget.style.display = "none")} />
-            <div>
-              <div className="font-bold text-sm text-accent leading-tight">نظام عبور الذكي</div>
-              <div className="text-xs text-sidebar-foreground/60 leading-tight">إدارة التأشيرات</div>
-            </div>
-          </div>
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed md:static inset-y-0 right-0 z-50 w-64 bg-sidebar border-l border-sidebar-border flex flex-col h-full no-print transform transition-transform duration-300 md:transform-none",
+          open ? "translate-x-0" : "translate-x-full",
+          "md:translate-x-0",
+        )}
+      >
+        {/* Header */}
+        <div className="h-16 px-6 flex items-center border-b border-sidebar-border">
+          <LayoutDashboard className="w-6 h-6 text-sidebar-primary ml-3" />
+          <span className="font-bold text-sidebar-foreground">
+            نظام عبور الذكي
+          </span>
+          <button
+            aria-label="إغلاق"
+            className="md:hidden mr-auto text-sidebar-foreground/70"
+            onClick={onClose}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {visibleNav.map((item) => {
-            const active = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+          {nav.map((item) => {
+            const active =
+              location === item.href ||
+              (item.href !== "/" && location.startsWith(item.href));
+            const Icon = item.icon;
             return (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} onClick={onClose}>
                 <div
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors",
                     active
-                      ? "bg-accent text-accent-foreground font-semibold"
-                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                   )}
                 >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  <Icon
+                    className={cn(
+                      "w-4 h-4 flex-shrink-0",
+                      active && "text-sidebar-primary",
+                    )}
+                  />
                   <span className="flex-1">{item.label}</span>
-                  {active && <ChevronRight className="w-3 h-3 opacity-60" />}
                 </div>
               </Link>
             );
           })}
         </nav>
 
-        {/* User + Logout */}
-        <div className="p-3 border-t border-sidebar-border">
-          <div className="text-xs text-sidebar-foreground/60 mb-2 px-1">
-            {user?.username && <span className="font-medium text-sidebar-foreground/80">{user.username}</span>}
-            {role === "provider" && <span className="mr-1 text-accent">(مزود)</span>}
-            {role === "owner" && <span className="mr-1 text-accent">(مكتب)</span>}
+        {/* Footer */}
+        <div className="p-4 border-t border-sidebar-border">
+          <div className="mb-3 px-1">
+            <div className="text-sm font-medium text-sidebar-foreground">
+              {user?.username}
+            </div>
+            <div className="text-xs text-sidebar-foreground/60">
+              {roleLabel(role)}
+            </div>
           </div>
           <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
-            onClick={() => logout.mutate(undefined)}
+            variant="outline"
+            className="w-full justify-start text-destructive hover:bg-destructive/10 border-destructive/20 hover:text-destructive"
+            onClick={() => logout.mutate()}
           >
             <LogOut className="w-4 h-4 ml-2" />
             تسجيل الخروج
           </Button>
         </div>
       </aside>
+    </>
+  );
+}
 
-      {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+// --------------------------------------------------------------------------
+// Shell
+// --------------------------------------------------------------------------
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div dir="rtl" className="flex h-screen overflow-hidden bg-background">
+      <Sidebar open={open} onClose={() => setOpen(false)} />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <OfflineBanner />
+
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center gap-3 h-14 px-4 border-b border-border bg-card">
+          <button aria-label="القائمة" onClick={() => setOpen(true)}>
+            <Menu className="w-6 h-6" />
+          </button>
+          <span className="font-bold">نظام عبور الذكي</span>
+        </div>
+
+        <main className="flex-1 overflow-y-auto w-full oboor-canvas">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
+
+export default AppLayout;

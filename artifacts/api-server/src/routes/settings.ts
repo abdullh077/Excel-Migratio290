@@ -1,11 +1,51 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
+import { z } from "zod";
 import { db, officeSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 import { UpdateOfficeSettingsBody } from "@workspace/api-zod";
 
 const router = Router();
+
+// PUBLIC — used on the login page before any session exists.
+// Returns the branding (office name + logo) of the most recently updated office.
+router.get("/settings/branding", async (_req, res): Promise<void> => {
+  const [row] = await db
+    .select({ officeName: officeSettingsTable.officeName, officeLogo: officeSettingsTable.officeLogo })
+    .from(officeSettingsTable)
+    .orderBy(desc(officeSettingsTable.updatedAt))
+    .limit(1);
+
+  res.json({ officeName: row?.officeName ?? "", officeLogo: row?.officeLogo ?? "" });
+});
+
+// Everything below requires an authenticated office session.
 router.use(requireOffice);
+
+const BrandingBody = z.object({
+  officeLogo: z.string().nullish(),
+});
+
+async function saveBranding(req: Request, res: Response): Promise<void> {
+  const officeId = req.session.officeId!;
+  const parsed = BrandingBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [row] = await db
+    .insert(officeSettingsTable)
+    .values({ userId: officeId, officeLogo: parsed.data.officeLogo ?? null, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: officeSettingsTable.userId,
+      set: { officeLogo: parsed.data.officeLogo ?? null, updatedAt: new Date() },
+    })
+    .returning();
+
+  res.json({ officeName: row.officeName ?? "", officeLogo: row.officeLogo ?? "" });
+}
+
+router.post("/settings/branding", saveBranding);
+router.put("/settings/branding", saveBranding);
 
 router.get("/settings/office", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;

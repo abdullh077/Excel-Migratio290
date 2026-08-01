@@ -1,21 +1,23 @@
-import { useGetMe } from "@workspace/api-client-react";
-import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api";
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  role: string;
+  officeName?: string | null;
+  officeConfigured?: boolean;
+  [key: string]: any;
+}
+
+export function useGetMe() {
+  return useQuery<AuthUser>({
+    queryKey: ["/api/auth/me"],
+    queryFn: () => apiRequest<AuthUser>("/api/auth/me"),
+  });
+}
 
 export function useAuth() {
   const { data: user, isLoading, isError } = useGetMe();
   return { user, isLoading, isError };
-}
-
-export function useRequireAuth() {
-  const { user, isLoading, isError } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (!isLoading && isError) {
-      setLocation("/login");
-    }
-  }, [isLoading, isError, setLocation]);
-
-  return { user, isLoading };
 }

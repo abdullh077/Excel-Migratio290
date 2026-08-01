@@ -29,13 +29,14 @@ async function computeAgentBalance(officeId: number, agentId: number, agentName:
   const [salesRow] = await db
     .select({
       total: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
+      profit: sql<number>`coalesce(sum(${umrahClientsTable.salePrice} - ${umrahClientsTable.purchasePrice}),0)::float`,
       count: sql<number>`count(*)::int`,
     })
     .from(umrahClientsTable)
     .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agentName)));
 
   const [salesRow2] = await db
-    .select({ total: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`, count: sql<number>`count(*)::int` })
+    .select({ total: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`, profit: sql<number>`coalesce(sum(${otherVisasTable.salePrice} - ${otherVisasTable.purchasePrice}),0)::float`, count: sql<number>`count(*)::int` })
     .from(otherVisasTable)
     .where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agentName)));
 
@@ -51,7 +52,9 @@ async function computeAgentBalance(officeId: number, agentId: number, agentName:
   const paidFrom = payRow.paidFrom ?? 0;
   const paidTo = payRow.paidTo ?? 0;
   const balance = totalSales - paidFrom + paidTo;
-  return { totalSales, paidFrom, paidTo, balance, txCount: (salesRow.count ?? 0) + (salesRow2.count ?? 0) };
+  const profit = (salesRow.profit ?? 0) + (salesRow2.profit ?? 0);
+  const txCount = (salesRow.count ?? 0) + (salesRow2.count ?? 0);
+  return { totalSales, paidFrom, paidTo, balance, profit, txCount, transactions: txCount };
 }
 
 router.get("/statement/agents", async (req, res): Promise<void> => {
@@ -103,6 +106,35 @@ router.delete("/statement/agents/:id", async (req, res): Promise<void> => {
   const [row] = await db.delete(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, req.session.officeId!))).returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ message: "Deleted" });
+});
+
+// Original frontend contract: GET /statement/agents/:id → { agent, totals, payments, transactions }
+router.get("/statement/agents/:id", async (req, res): Promise<void> => {
+  const params = GetAgentDetailsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const officeId = req.session.officeId!;
+
+  const [agent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
+  if (!agent) { res.status(404).json({ error: "Not found" }); return; }
+
+  const bal = await computeAgentBalance(officeId, agent.id, agent.name);
+
+  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
+  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, purchasePrice: otherVisasTable.purchasePrice, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
+
+  const transactions = [
+    ...umrahTx.map((r) => ({ id: `u-${r.id}`, kind: "umrah", clientName: r.clientName, date: r.issueDate, sale: Number(r.salePrice), purchase: Number(r.purchasePrice), createdAt: r.createdAt.toISOString() })),
+    ...visaTx.map((r) => ({ id: `v-${r.id}`, kind: "visa", clientName: r.clientName, date: r.issueDate, sale: Number(r.salePrice), purchase: Number(r.purchasePrice), createdAt: r.createdAt.toISOString() })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const payments = await db.select().from(agentPaymentsTable).where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agent.id))).orderBy(agentPaymentsTable.paidAt);
+
+  res.json({
+    agent: { id: agent.id, name: agent.name, phone: agent.phone },
+    totals: { count: bal.txCount, totalSales: bal.totalSales, paidFrom: bal.paidFrom, paidTo: bal.paidTo, balance: bal.balance },
+    payments: payments.map((p) => ({ id: p.id, amount: Number(p.amount), direction: p.direction, paidAt: p.paidAt.toISOString(), notes: p.notes })),
+    transactions,
+  });
 });
 
 router.get("/statement/agents/:id/details", async (req, res): Promise<void> => {
@@ -249,12 +281,16 @@ router.get("/statement/summary", async (req, res): Promise<void> => {
 
   const txRows = await db.select({
     month: sql<string>`to_char(${umrahClientsTable.createdAt}, 'YYYY-MM')`,
-    income: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
+    sales: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
+    profit: sql<number>`coalesce(sum(${umrahClientsTable.salePrice} - ${umrahClientsTable.purchasePrice}),0)::float`,
+    count: sql<number>`count(*)::int`,
   }).from(umrahClientsTable).where(eq(umrahClientsTable.userId, officeId)).groupBy(sql`to_char(${umrahClientsTable.createdAt}, 'YYYY-MM')`);
 
   const visaTxRows = await db.select({
     month: sql<string>`to_char(${otherVisasTable.createdAt}, 'YYYY-MM')`,
-    income: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`,
+    sales: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`,
+    profit: sql<number>`coalesce(sum(${otherVisasTable.salePrice} - ${otherVisasTable.purchasePrice}),0)::float`,
+    count: sql<number>`count(*)::int`,
   }).from(otherVisasTable).where(eq(otherVisasTable.userId, officeId)).groupBy(sql`to_char(${otherVisasTable.createdAt}, 'YYYY-MM')`);
 
   const ledgerRows = await db.select({
@@ -263,14 +299,35 @@ router.get("/statement/summary", async (req, res): Promise<void> => {
     expense: sql<number>`coalesce(sum(case when type='expense' then amount::float else 0 end),0)::float`,
   }).from(ledgerEntriesTable).where(eq(ledgerEntriesTable.userId, officeId)).groupBy(sql`to_char(${ledgerEntriesTable.entryDate}, 'YYYY-MM')`);
 
-  const monthMap = new Map<string, { income: number; expense: number }>();
-  for (const r of txRows) { const e = monthMap.get(r.month) ?? { income: 0, expense: 0 }; monthMap.set(r.month, { ...e, income: e.income + r.income }); }
-  for (const r of visaTxRows) { const e = monthMap.get(r.month) ?? { income: 0, expense: 0 }; monthMap.set(r.month, { ...e, income: e.income + r.income }); }
-  for (const r of ledgerRows) { const e = monthMap.get(r.month) ?? { income: 0, expense: 0 }; monthMap.set(r.month, { ...e, income: e.income + r.income, expense: e.expense + r.expense }); }
+  type MonthAgg = { txCount: number; txSales: number; txProfit: number; otherIncome: number; expenses: number };
+  const monthMap = new Map<string, MonthAgg>();
+  const getMonth = (m: string): MonthAgg => {
+    let e = monthMap.get(m);
+    if (!e) { e = { txCount: 0, txSales: 0, txProfit: 0, otherIncome: 0, expenses: 0 }; monthMap.set(m, e); }
+    return e;
+  };
+  for (const r of txRows) { const e = getMonth(r.month); e.txCount += r.count; e.txSales += r.sales; e.txProfit += r.profit; }
+  for (const r of visaTxRows) { const e = getMonth(r.month); e.txCount += r.count; e.txSales += r.sales; e.txProfit += r.profit; }
+  for (const r of ledgerRows) { const e = getMonth(r.month); e.otherIncome += r.income; e.expenses += r.expense; }
 
   const result = Array.from(monthMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { income, expense }]) => ({ month, income, expense, net: income - expense }));
+    .map(([month, m]) => {
+      const net = m.txProfit + m.otherIncome - m.expenses;
+      // `income`/`expense` retained for the generated StatementMonth shape.
+      const income = m.txSales + m.otherIncome;
+      return {
+        month,
+        txCount: m.txCount,
+        txSales: m.txSales,
+        txProfit: m.txProfit,
+        otherIncome: m.otherIncome,
+        expenses: m.expenses,
+        income,
+        expense: m.expenses,
+        net,
+      };
+    });
 
   res.json(result);
 });
