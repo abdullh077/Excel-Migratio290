@@ -13,9 +13,12 @@ export const otherVisasTable = pgTable("other_visas", {
   requestNumber: text("request_number").notNull(),
   phone: text("phone").notNull(),
   agent: text("agent").notNull(),
+  // اسم العميل — the client account charged with the sale in the statement.
+  // clientName above is اسم الجواز (the passport holder / end customer).
+  client: text("client").notNull().default(""),
   issueDate: text("issue_date").notNull(),
   visaType: text("visa_type").notNull(),
-  issuingAuthority: text("issuing_authority").notNull(),
+  issuingAuthority: text("issuing_authority").notNull().default(""),
   transactionParty: text("transaction_party"), // جهة المعاملة — shown on receipt
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }).notNull(),
   salePrice: numeric("sale_price", { precision: 12, scale: 2 }).notNull(),

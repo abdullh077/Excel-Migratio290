@@ -24,9 +24,10 @@ const EMPTY = {
   requestNumber: "",
   phone: "",
   agent: "",
+  client: "",
+  openingBalance: "",
   issueDate: today(),
   visaType: "زيارة عائلية",
-  issuingAuthority: "السعودية",
   transactionParty: "",
   purchasePrice: 0,
   salePrice: 0,
@@ -162,9 +163,10 @@ export default function VisasPage() {
       requestNumber: v.requestNumber ?? "",
       phone: v.phone ?? "",
       agent: v.agent ?? "",
+      client: v.client ?? "",
+      openingBalance: "",
       issueDate: v.issueDate ? String(v.issueDate).slice(0, 10) : today(),
       visaType: v.visaType ?? "زيارة عائلية",
-      issuingAuthority: v.issuingAuthority ?? "السعودية",
       transactionParty: v.transactionParty ?? "",
       purchasePrice: v.purchasePrice ?? 0,
       salePrice: v.salePrice ?? 0,
@@ -186,7 +188,7 @@ export default function VisasPage() {
     if (!form.agent?.trim()) e.agent = "الوكيل مطلوب";
     if (!form.issueDate?.trim()) e.issueDate = "تاريخ الإصدار مطلوب";
     if (!form.visaType?.trim()) e.visaType = "نوع التأشيرة مطلوب";
-    if (!form.issuingAuthority?.trim()) e.issuingAuthority = "جهة الإصدار مطلوبة";
+    if (form.openingBalance !== "" && isNaN(Number(form.openingBalance))) e.openingBalance = "يجب أن يكون رقماً";
     if (form.purchasePrice === "" || isNaN(Number(form.purchasePrice))) e.purchasePrice = "يجب أن يكون رقماً";
     if (form.salePrice === "" || isNaN(Number(form.salePrice))) e.salePrice = "يجب أن يكون رقماً";
     if (form.receivedFromClient === "" || isNaN(Number(form.receivedFromClient))) e.receivedFromClient = "يجب أن يكون رقماً";
@@ -205,9 +207,9 @@ export default function VisasPage() {
       requestNumber: form.requestNumber,
       phone: form.phone,
       agent: form.agent,
+      client: form.client?.trim() || "",
       issueDate: form.issueDate,
       visaType: form.visaType,
-      issuingAuthority: form.issuingAuthority,
       transactionParty: form.transactionParty || "",
       purchasePrice: Number(form.purchasePrice),
       salePrice: Number(form.salePrice),
@@ -215,6 +217,9 @@ export default function VisasPage() {
       transferredToAgent: Number(form.transferredToAgent),
       notes: form.notes || "",
     };
+    if (form.openingBalance !== "" && !isNaN(Number(form.openingBalance))) {
+      payload.openingBalance = Number(form.openingBalance);
+    }
 
     if (editing) {
       update.mutate({ id: editing, payload });
@@ -296,9 +301,10 @@ export default function VisasPage() {
               <thead className="bg-muted/50 text-muted-foreground text-xs">
                 <tr>
                   <th className="px-3 py-3 text-right font-medium">م</th>
-                  <th className="px-3 py-3 text-right font-medium">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium">اسم الجواز</th>
                   <th className="px-3 py-3 text-right font-medium">رقم الطلب</th>
                   <th className="px-3 py-3 text-right font-medium">الوكيل</th>
+                  <th className="px-3 py-3 text-right font-medium">العميل</th>
                   <th className="px-3 py-3 text-right font-medium">الإصدار</th>
                   <th className="px-3 py-3 text-right font-medium">نوع التأشيرة</th>
                   <th className="px-3 py-3 text-right font-medium">الشراء</th>
@@ -314,14 +320,14 @@ export default function VisasPage() {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={14} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={15} className="text-center py-8 text-muted-foreground">
                       جاري التحميل...
                     </td>
                   </tr>
                 )}
                 {!isLoading && visas.length === 0 && (
                   <tr>
-                    <td colSpan={14} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={15} className="text-center py-12 text-muted-foreground">
                       <div className="font-medium">لا توجد تأشيرات</div>
                       <div className="text-xs mt-1">أضف أول تأشيرة بالضغط على زر «إضافة تأشيرة جديدة».</div>
                     </td>
@@ -343,10 +349,8 @@ export default function VisasPage() {
                     </td>
                     <td className="px-3 py-2" dir="ltr">{v.requestNumber}</td>
                     <td className="px-3 py-2">{v.agent}</td>
-                    <td className="px-3 py-2">
-                      <div>{formatDate(v.issueDate)}</div>
-                      <div className="text-xs text-muted-foreground">{v.issuingAuthority}</div>
-                    </td>
+                    <td className="px-3 py-2">{v.client || "—"}</td>
+                    <td className="px-3 py-2">{formatDate(v.issueDate)}</td>
                     <td className="px-3 py-2">{v.visaType}</td>
                     <td className="px-3 py-2" dir="ltr">{fmt(v.purchasePrice)}</td>
                     <td className="px-3 py-2" dir="ltr">{fmt(v.salePrice)}</td>
@@ -404,7 +408,7 @@ export default function VisasPage() {
               <DialogTitle>{editing ? "تعديل التأشيرة" : "إضافة تأشيرة جديدة"}</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-2 overflow-visible">
-              <Field label="اسم العميل" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
+              <Field label="اسم الجواز" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
               <Field label="رقم الجواز" required ltr value={form.passportNumber} onChange={(v) => setForm((f: any) => ({ ...f, passportNumber: v }))} error={errors.passportNumber} />
               <Field label="رقم الطلب" required ltr value={form.requestNumber} onChange={(v) => setForm((f: any) => ({ ...f, requestNumber: v }))} error={errors.requestNumber} />
               <Field label="رقم الجوال" required ltr value={form.phone} onChange={(v) => setForm((f: any) => ({ ...f, phone: v }))} error={errors.phone} />
@@ -423,6 +427,7 @@ export default function VisasPage() {
                 </datalist>
                 {errors.agent && <p className="text-xs text-destructive">{errors.agent}</p>}
               </div>
+              <Field label="اسم العميل (يُقيَّد عليه البيع في كشف الحساب)" placeholder="اتركه فارغاً إن لم يوجد" value={form.client} onChange={(v) => setForm((f: any) => ({ ...f, client: v }))} />
               <Field label="تاريخ الإصدار" required type="date" value={form.issueDate} onChange={(v) => setForm((f: any) => ({ ...f, issueDate: v }))} error={errors.issueDate} />
               <div className="space-y-1.5">
                 <Label>نوع التأشيرة<span className="text-destructive mr-1">*</span></Label>
@@ -438,12 +443,12 @@ export default function VisasPage() {
                 </select>
                 {errors.visaType && <p className="text-xs text-destructive">{errors.visaType}</p>}
               </div>
-              <Field label="جهة الإصدار" required value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} error={errors.issuingAuthority} />
               <Field label="ترحيل عبر (يظهر في السند)" placeholder="ترحيل عبر" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
               <Field label="سعر الشراء" required type="number" min={0} value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: v === "" ? "" : Number(v) }))} error={errors.purchasePrice} />
               <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
               <Field label="مستلم من العميل" required type="number" min={0} value={String(form.receivedFromClient)} onChange={(v) => setForm((f: any) => ({ ...f, receivedFromClient: v === "" ? "" : Number(v) }))} error={errors.receivedFromClient} />
               <Field label="محول للوكيل" required type="number" min={0} value={String(form.transferredToAgent)} onChange={(v) => setForm((f: any) => ({ ...f, transferredToAgent: v === "" ? "" : Number(v) }))} error={errors.transferredToAgent} />
+              <Field label="الرصيد الافتتاحي للعميل (اختياري)" type="number" value={String(form.openingBalance)} onChange={(v) => setForm((f: any) => ({ ...f, openingBalance: v }))} error={errors.openingBalance} />
               <Field label="ملاحظات" value={form.notes} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
             </div>
             <DialogFooter>

@@ -10,7 +10,7 @@
 - [Visa Manager multi-tenancy](visa-manager-multitenancy.md) — office-scoped isolation (officeId = owner id; subs inherit); legacy role "admin" is normalized to "provider" at login/auth.
 - [Session security baseline](session-security-baseline.md) — prod needs trust proxy + secure/lax cookie + session.regenerate on login; invisible in dev, fails audit in prod.
 - [Offline outbox + PWA](offline-outbox-pwa.md) — outbox uploads need clientRequestId idempotency; never SW-cache /api/auth/*; wipe persisted caches on login/logout.
-- [Agent statement](agent-statement.md) — agents link by text name; balance = sales − paidFrom + paidTo; client balance also folds in standalone vouchers (see file); financials owner+provider only.
+- [Agent statement](agent-statement.md) — agents link by text name; balance = sales − paidFrom + paidTo; client balance also folds in standalone vouchers (see file); subs now see statement/vouchers (2026-08); office mgmt owner-only.
 - [Autoscale scheduled work](autoscale-scheduled-work.md) — no cron on autoscale; run "daily" jobs as a lazy once-per-day check on authenticated activity (e.g. daily backup on any provider request).
 - [Generated hooks pattern](orval-generated-hooks.md) — mutations are export const (not export function); UseQueryOptions requires queryKey in v5; pass queryKey from getXQueryKey() when using enabled option.
 - [Dashboard defensive arrays](dashboard-defensive.md) — always wrap API array responses with Array.isArray() guard; stale production api-server can return objects instead of arrays during partial deploys.

@@ -19,12 +19,13 @@ router.get("/statement/agent-names", requireOffice, async (req, res): Promise<vo
   res.json(rows.map((r) => r.name));
 });
 
-// All other statement routes: owner/provider only
-router.use("/statement/agents", requireOwner);
-router.use("/statement/payments", requireOwner);
-router.use("/statement/clients", requireOwner);
-router.use("/statement/ledger", requireOwner);
-router.use("/statement/summary", requireOwner);
+// Statement routes are available to all office users (owner, provider, subs) —
+// sub accounts are full-featured except office management (see routes/subs.ts).
+router.use("/statement/agents", requireOffice);
+router.use("/statement/payments", requireOffice);
+router.use("/statement/clients", requireOffice);
+router.use("/statement/ledger", requireOffice);
+router.use("/statement/summary", requireOffice);
 
 async function computeAgentBalance(officeId: number, agentId: number, agentName: string) {
   const [salesRow] = await db
@@ -120,8 +121,8 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
 
   const bal = await computeAgentBalance(officeId, agent.id, agent.name);
 
-  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
-  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, purchasePrice: otherVisasTable.purchasePrice, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
+  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, client: umrahClientsTable.client, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
+  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, client: otherVisasTable.client, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, purchasePrice: otherVisasTable.purchasePrice, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
 
   const transactions = [
     ...umrahTx.map((r) => ({ id: `u-${r.id}`, kind: "umrah", clientName: r.clientName, date: r.issueDate, sale: Number(r.salePrice), purchase: Number(r.purchasePrice), createdAt: r.createdAt.toISOString() })),
@@ -141,11 +142,11 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   const movements: LedgerRow[] = [
     ...umrahTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})`, debit: Number(r.salePrice) || 0, credit: 0 };
+      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})${r.client ? ` — العميل: ${r.client}` : ""}`, debit: Number(r.salePrice) || 0, credit: 0 };
     }),
     ...visaTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة باسم (${r.clientName})`, debit: Number(r.salePrice) || 0, credit: 0 };
+      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة باسم (${r.clientName})${r.client ? ` — العميل: ${r.client}` : ""}`, debit: Number(r.salePrice) || 0, credit: 0 };
     }),
     ...payments.map((p) => {
       const amount = Number(p.amount) || 0;
@@ -303,9 +304,13 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
   const manualRows = await db.select().from(clientAccountsTable)
     .where(eq(clientAccountsTable.userId, officeId));
 
+  // The client account charged is the `client` field (اسم العميل). Legacy rows
+  // (created before the field existed) fall back to clientName so old
+  // statements keep working without a data migration.
+  const visaClientKey = sql<string>`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName})`;
   const visaRows = await db
     .select({
-      clientName: otherVisasTable.clientName,
+      clientName: visaClientKey,
       phone: otherVisasTable.phone,
       totalSales: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`,
       totalReceived: sql<number>`coalesce(sum(${otherVisasTable.receivedFromClient}),0)::float`,
@@ -314,7 +319,20 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
     })
     .from(otherVisasTable)
     .where(eq(otherVisasTable.userId, officeId))
-    .groupBy(otherVisasTable.clientName, otherVisasTable.phone);
+    .groupBy(visaClientKey, otherVisasTable.phone);
+
+  // Umrah transactions charge the client only when اسم العميل was filled in
+  // (legacy umrah rows never appeared in client statements — keep it that way).
+  const umrahRows = await db
+    .select({
+      clientName: umrahClientsTable.client,
+      phone: umrahClientsTable.phone,
+      totalSales: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
+      txCount: sql<number>`count(*)::int`,
+    })
+    .from(umrahClientsTable)
+    .where(and(eq(umrahClientsTable.userId, officeId), ne(umrahClientsTable.client, "")))
+    .groupBy(umrahClientsTable.client, umrahClientsTable.phone);
 
   // Standalone client vouchers (سندات قبض/صرف باسم العميل).
   // Excludes agent vouchers and vouchers linked to agent payments to avoid
@@ -340,13 +358,24 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
       prev.balance += r.balance; prev.txCount += r.txCount;
       prev.phone = prev.phone || r.phone;
     } else {
-      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null });
+      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
+    }
+  }
+  for (const r of umrahRows) {
+    const key = r.clientName;
+    const prev = byName.get(key);
+    if (prev) {
+      prev.totalSales += r.totalSales; prev.balance += r.totalSales; prev.txCount += r.txCount;
+      prev.phone = prev.phone || r.phone;
+    } else {
+      byName.set(key, { clientName: key, phone: r.phone, totalSales: r.totalSales, totalReceived: 0, balance: r.totalSales, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
     }
   }
   for (const m of manualRows) {
+    const opening = Number(m.openingBalance) || 0;
     const prev = byName.get(m.clientName);
-    if (prev) { prev.manualId = m.id; prev.phone = prev.phone || m.phone; }
-    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: 0, txCount: 0, voucherReceipts: 0, voucherPayments: 0, manualId: m.id });
+    if (prev) { prev.manualId = m.id; prev.phone = prev.phone || m.phone; prev.openingBalance = opening; prev.balance += opening; }
+    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: opening, txCount: 0, voucherReceipts: 0, voucherPayments: 0, manualId: m.id, openingBalance: opening });
   }
   // Fold vouchers into balances only for known client accounts (transaction
   // clients or manual accounts) — vouchers for arbitrary "other" parties
@@ -369,15 +398,27 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
   const name = q.data.name;
 
+  // Same legacy fallback as the list endpoint: client field, else clientName.
+  const clientKeyMatch = sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${name}`;
   const [totals] = await db.select({
     totalSales: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`,
     totalReceived: sql<number>`coalesce(sum(${otherVisasTable.receivedFromClient}),0)::float`,
     balance: sql<number>`coalesce(sum(${otherVisasTable.salePrice} - ${otherVisasTable.receivedFromClient}),0)::float`,
     txCount: sql<number>`count(*)::int`,
     phone: sql<string | null>`max(${otherVisasTable.phone})`,
-  }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.clientName, name)));
+  }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), clientKeyMatch));
 
-  const txRows = await db.select().from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.clientName, name))).orderBy(otherVisasTable.createdAt);
+  const txRows = await db.select().from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), clientKeyMatch)).orderBy(otherVisasTable.createdAt);
+
+  // Umrah transactions linked to this client (اسم العميل on the umrah form).
+  const umrahRows = await db.select().from(umrahClientsTable)
+    .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.client, name)))
+    .orderBy(umrahClientsTable.createdAt);
+
+  // Manual client account (holds the opening balance, if any).
+  const [account] = await db.select().from(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, name)));
+  const openingBalance = Number(account?.openingBalance) || 0;
   // Standalone client vouchers only — agent vouchers and vouchers linked to
   // agent payments belong to the agent statement (avoids double counting).
   const vouchers = await db.select().from(vouchersTable)
@@ -402,7 +443,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         kind: r.visaType || "تأشيرة",
         date: dt.toISOString(),
         sortKey: dt.getTime(),
-        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
+        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})${r.agent ? ` — الوكيل: ${r.agent}` : ""}`,
         debit: Number(r.salePrice) || 0,
         credit: 0,
       }];
@@ -420,6 +461,18 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
       }
       return rows;
     })
+    .concat(umrahRows.map((r): LedgerRow => {
+      const dt = toDate(r.issueDate) ?? r.createdAt;
+      return {
+        ref: `U-${r.id}`,
+        kind: "عمرة",
+        date: dt.toISOString(),
+        sortKey: dt.getTime(),
+        description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})${r.agent ? ` — الوكيل: ${r.agent}` : ""}`,
+        debit: Number(r.salePrice) || 0,
+        credit: 0,
+      };
+    }))
     .concat(vouchers.map((v): LedgerRow => {
       const isReceipt = v.kind === "receipt";
       return {
@@ -447,11 +500,20 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   const before = fromDay ? movements.filter((m) => dayOf(m.date) < fromDay) : [];
   const inPeriod = movements.filter((m) =>
     (!fromDay || dayOf(m.date) >= fromDay) && (!toDay || dayOf(m.date) <= toDay));
-  const opening = before.reduce((s, m) => s + m.debit - m.credit, 0);
+  // Opening balance of the account (الرصيد الافتتاحي) always sits before any movement.
+  const opening = openingBalance + before.reduce((s, m) => s + m.debit - m.credit, 0);
 
+  const umrahSales = umrahRows.reduce((s, r) => s + (Number(r.salePrice) || 0), 0);
   res.json({
-    account: { clientName: name, phone: totals.phone, totalSales: totals.totalSales, totalReceived: totals.totalReceived, voucherReceipts, voucherPayments, balance: totals.balance + voucherPayments - voucherReceipts, txCount: totals.txCount },
-    transactions: txRows.map((r) => ({ id: r.id, clientName: r.clientName, type: r.visaType, issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: Number(r.receivedFromClient), createdAt: r.createdAt.toISOString() })),
+    account: {
+      clientName: name, phone: totals.phone, openingBalance,
+      totalSales: totals.totalSales + umrahSales, totalReceived: totals.totalReceived,
+      voucherReceipts, voucherPayments,
+      balance: openingBalance + totals.balance + umrahSales + voucherPayments - voucherReceipts,
+      txCount: totals.txCount + umrahRows.length,
+    },
+    transactions: txRows.map((r) => ({ id: r.id, clientName: r.clientName, type: r.visaType, issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: Number(r.receivedFromClient), createdAt: r.createdAt.toISOString() }))
+      .concat(umrahRows.map((r) => ({ id: r.id, clientName: r.clientName, type: "عمرة", issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: 0, createdAt: r.createdAt.toISOString() }))),
     vouchers: vouchers.map((v) => ({ id: v.id, kind: v.kind, partyType: v.partyType, partyName: v.partyName, amount: Number(v.amount), description: v.description, voucherDate: v.voucherDate.toISOString(), agentPaymentId: v.agentPaymentId, createdAt: v.createdAt.toISOString() })),
     ledger: {
       from: from ? from.toISOString() : null,

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, umrahClientsTable } from "@workspace/db";
 import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
+import { ensureClientAccount, ensureAgent } from "../lib/clientAccounts.js";
 import {
   CreateUmrahClientBody,
   UpdateUmrahClientBody,
@@ -40,6 +41,7 @@ router.get("/umrah", async (req, res): Promise<void> => {
             ilike(umrahClientsTable.passportNumber, term),
             ilike(umrahClientsTable.phone, term),
             ilike(umrahClientsTable.agent, term),
+            ilike(umrahClientsTable.client, term),
             ilike(umrahClientsTable.issuingAuthority, term),
             ilike(umrahClientsTable.transactionParty, term),
             ilike(umrahClientsTable.sendStatus, term),
@@ -82,7 +84,9 @@ router.post("/umrah", async (req, res): Promise<void> => {
     return;
   }
   const officeId = req.session.officeId!;
-  const { clientRequestId: rawRequestId, entryDate, ...rest } = parsed.data as any;
+  const { clientRequestId: rawRequestId, entryDate, openingBalance, ...rest } = parsed.data as any;
+  await ensureClientAccount(officeId, rest.client, openingBalance);
+  await ensureAgent(officeId, rest.agent);
   // Normalize empty/blank clientRequestId to null so it never collides on the
   // unique index (empty strings would otherwise dedup to the first-ever record
   // and block all subsequent creates).
@@ -134,6 +138,10 @@ router.put("/umrah/:id", async (req, res): Promise<void> => {
   const values: Record<string, unknown> = { ...parsed.data };
   if (values.entryDate) values.entryDate = new Date(values.entryDate as string);
   if (values.clientRequestId !== undefined) delete values.clientRequestId;
+  const openingBalance = values.openingBalance as number | undefined;
+  delete values.openingBalance;
+  await ensureClientAccount(req.session.officeId!, values.client as string | undefined, openingBalance);
+  await ensureAgent(req.session.officeId!, values.agent as string | undefined);
   if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
 
   const [row] = await db.update(umrahClientsTable).set(values as any).where(and(eq(umrahClientsTable.id, params.data.id), eq(umrahClientsTable.userId, req.session.officeId!))).returning();

@@ -123,7 +123,7 @@ router.get("/dashboard/outstanding", async (req, res): Promise<void> => {
   const rows = await db
     .select({
       id: otherVisasTable.id,
-      clientName: otherVisasTable.clientName,
+      clientName: sql<string>`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName})`,
       phone: otherVisasTable.phone,
       clientBalance: sql<number>`(${otherVisasTable.salePrice} - ${otherVisasTable.receivedFromClient})::float`,
       agentBalance: sql<number>`(${otherVisasTable.purchasePrice} - ${otherVisasTable.transferredToAgent})::float`,

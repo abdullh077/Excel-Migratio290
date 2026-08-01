@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, otherVisasTable } from "@workspace/db";
 import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
+import { ensureClientAccount, ensureAgent } from "../lib/clientAccounts.js";
 import {
   CreateVisaBody,
   UpdateVisaBody,
@@ -49,6 +50,7 @@ router.get("/visas", async (req, res): Promise<void> => {
             ilike(otherVisasTable.requestNumber, term),
             ilike(otherVisasTable.phone, term),
             ilike(otherVisasTable.agent, term),
+            ilike(otherVisasTable.client, term),
             ilike(otherVisasTable.visaType, term),
             ilike(otherVisasTable.issuingAuthority, term),
             ilike(otherVisasTable.transactionParty, term),
@@ -71,7 +73,9 @@ router.post("/visas", async (req, res): Promise<void> => {
   const parsed = CreateVisaBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
-  const { clientRequestId: rawRequestId, ...rest } = parsed.data as any;
+  const { clientRequestId: rawRequestId, openingBalance, ...rest } = parsed.data as any;
+  await ensureClientAccount(officeId, rest.client, openingBalance);
+  await ensureAgent(officeId, rest.agent);
   // Normalize empty/blank clientRequestId to null so it never collides on the
   // unique index (empty strings would otherwise dedup to the first-ever record
   // and block all subsequent creates).
@@ -103,6 +107,10 @@ router.put("/visas/:id", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const values: Record<string, unknown> = { ...parsed.data };
   if (values.clientRequestId !== undefined) delete values.clientRequestId;
+  const openingBalance = values.openingBalance as number | undefined;
+  delete values.openingBalance;
+  await ensureClientAccount(req.session.officeId!, values.client as string | undefined, openingBalance);
+  await ensureAgent(req.session.officeId!, values.agent as string | undefined);
   if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
   const [row] = await db.update(otherVisasTable).set(values as any).where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, req.session.officeId!))).returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }

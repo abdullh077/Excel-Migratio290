@@ -34,10 +34,11 @@ function buildNav(role: string | undefined): NavItem[] {
     { href: "/umrah", label: "عملاء العمرة", icon: Users },
     { href: "/visas", label: "تأشيرات أخرى", icon: FileText },
     { href: "/archive", label: "الأرشيف العام", icon: Archive },
+    // كشف الحساب متاح لجميع مستخدمي المكتب (بما فيهم الحسابات الفرعية)
+    { href: "/statement", label: "كشف الحساب", icon: Wallet },
   ];
   if (role === "owner" || role === "provider") {
     base.push({ href: "/office", label: "بيانات المكتب", icon: Building2 });
-    base.push({ href: "/statement", label: "كشف الحساب", icon: Wallet });
   }
   if (role === "provider") {
     base.push({ href: "/provider", label: "إدارة المزوّد", icon: UserCog });

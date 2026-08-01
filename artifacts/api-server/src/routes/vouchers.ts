@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { db, vouchersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { requireOwner } from "../lib/auth.js";
+import { requireOffice } from "../lib/auth.js";
 import { CreateVoucherBody, DeleteVoucherParams, GetVoucherParams, ListVouchersQueryParams } from "@workspace/api-zod";
 
 const router = Router();
-router.use("/vouchers", requireOwner);
+// Available to all office users — subs are full-featured for daily work.
+router.use("/vouchers", requireOffice);
 
 function toVoucher(v: typeof vouchersTable.$inferSelect) {
   return { id: v.id, kind: v.kind, partyType: v.partyType, partyName: v.partyName, amount: Number(v.amount), description: v.description, voucherDate: v.voucherDate.toISOString(), agentPaymentId: v.agentPaymentId, createdAt: v.createdAt.toISOString() };

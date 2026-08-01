@@ -28,3 +28,8 @@ Only `provider` creates owner accounts (with expiry) AND sub accounts (under an 
 
 ## Schema apply
 `pnpm --filter @workspace/db run push` (drizzle-kit push). No migrate-on-boot.
+
+## Update 2026-08: sub accounts full-featured
+- /statement/* and /vouchers use requireOffice (subs allowed); /office/* stays requireOwner.
+- Statement client key: transactions carry a `client` field (اسم العميل) separate from `clientName` (اسم الجواز/passport holder). Visas fall back coalesce(nullif(client,''),client_name) for legacy rows; legacy umrah rows (client='') stay unlinked deliberately.
+- client_accounts.openingBalance folds into statement balance and ledger.opening; upserted by ensureClientAccount() on umrah/visa save.

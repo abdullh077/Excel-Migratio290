@@ -15,6 +15,8 @@ export interface OtherVisaUpdate {
   issueDate?: string;
   visaType?: string;
   issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice?: number;
   salePrice?: number;
   receivedFromClient?: number;

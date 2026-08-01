@@ -14,7 +14,9 @@ export interface UmrahClient {
   agent: string;
   issueDate: string;
   stayDuration: number;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
   salePrice: number;
   profit: number;

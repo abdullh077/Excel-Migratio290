@@ -12,9 +12,12 @@ export const umrahClientsTable = pgTable("umrah_clients", {
   passportNumber: text("passport_number").notNull(),
   phone: text("phone").notNull(),
   agent: text("agent").notNull(),
+  // اسم العميل — the client account charged with the sale in the statement.
+  // clientName above is اسم الجواز (the passport holder / end customer).
+  client: text("client").notNull().default(""),
   issueDate: text("issue_date").notNull(),
   stayDuration: integer("stay_duration").notNull(), // days; <90 = inside KSA, >=90 = outside
-  issuingAuthority: text("issuing_authority").notNull(),
+  issuingAuthority: text("issuing_authority").notNull().default(""),
   transactionParty: text("transaction_party"), // جهة المعاملة — shown on receipt
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }).notNull(),
   salePrice: numeric("sale_price", { precision: 12, scale: 2 }).notNull(),

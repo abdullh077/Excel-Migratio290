@@ -15,7 +15,9 @@ export interface OtherVisa {
   agent: string;
   issueDate: string;
   visaType: string;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
   salePrice: number;
   receivedFromClient: number;

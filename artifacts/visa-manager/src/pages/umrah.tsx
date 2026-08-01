@@ -23,10 +23,11 @@ const EMPTY = {
   passportNumber: "",
   phone: "",
   agent: "",
+  client: "",
+  openingBalance: "",
   issueDate: today(),
   stayDuration: 90,
   entryDate: "",
-  issuingAuthority: "اليمن",
   transactionParty: "",
   sendStatus: "قيد الانتظار",
   purchasePrice: 0,
@@ -183,10 +184,11 @@ export default function UmrahPage() {
       passportNumber: c.passportNumber ?? "",
       phone: c.phone ?? "",
       agent: c.agent ?? "",
+      client: c.client ?? "",
+      openingBalance: "",
       issueDate: c.issueDate ? String(c.issueDate).slice(0, 10) : today(),
       stayDuration: c.stayDuration ?? 90,
       entryDate: c.entryDate ? String(c.entryDate).slice(0, 10) : "",
-      issuingAuthority: c.issuingAuthority ?? "اليمن",
       transactionParty: c.transactionParty ?? "",
       sendStatus: c.sendStatus ?? "قيد الانتظار",
       purchasePrice: c.purchasePrice ?? 0,
@@ -207,7 +209,7 @@ export default function UmrahPage() {
     if (!form.issueDate?.trim()) e.issueDate = "تاريخ الإصدار مطلوب";
     if (form.stayDuration === "" || form.stayDuration == null || isNaN(Number(form.stayDuration)))
       e.stayDuration = "المدة مطلوبة";
-    if (!form.issuingAuthority?.trim()) e.issuingAuthority = "جهة الإصدار مطلوبة";
+    if (form.openingBalance !== "" && isNaN(Number(form.openingBalance))) e.openingBalance = "يجب أن يكون رقماً";
     if (form.purchasePrice === "" || isNaN(Number(form.purchasePrice))) e.purchasePrice = "يجب أن يكون رقماً";
     if (form.salePrice === "" || isNaN(Number(form.salePrice))) e.salePrice = "يجب أن يكون رقماً";
     return e;
@@ -223,16 +225,19 @@ export default function UmrahPage() {
       passportNumber: form.passportNumber,
       phone: form.phone,
       agent: form.agent,
+      client: form.client?.trim() || "",
       issueDate: form.issueDate,
       stayDuration: Number(form.stayDuration),
       entryDate: form.entryDate || undefined,
-      issuingAuthority: form.issuingAuthority,
       transactionParty: form.transactionParty || "",
       sendStatus: form.sendStatus,
       purchasePrice: Number(form.purchasePrice),
       salePrice: Number(form.salePrice),
       notes: form.notes || "",
     };
+    if (form.openingBalance !== "" && !isNaN(Number(form.openingBalance))) {
+      payload.openingBalance = Number(form.openingBalance);
+    }
 
     if (editing) {
       update.mutate({ id: editing, payload });
@@ -321,8 +326,9 @@ export default function UmrahPage() {
               <thead className="bg-muted/50 text-muted-foreground text-xs">
                 <tr>
                   <th className="px-3 py-3 text-right font-medium">م</th>
-                  <th className="px-3 py-3 text-right font-medium">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium">اسم الجواز</th>
                   <th className="px-3 py-3 text-right font-medium">الوكيل</th>
+                  <th className="px-3 py-3 text-right font-medium">العميل</th>
                   <th className="px-3 py-3 text-right font-medium">الإصدار</th>
                   <th className="px-3 py-3 text-right font-medium">الشراء</th>
                   <th className="px-3 py-3 text-right font-medium">البيع</th>
@@ -335,14 +341,14 @@ export default function UmrahPage() {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={11} className="text-center py-8 text-muted-foreground">
                       جاري التحميل...
                     </td>
                   </tr>
                 )}
                 {!isLoading && clients.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={11} className="text-center py-12 text-muted-foreground">
                       <div className="font-medium">لا يوجد معتمرون</div>
                       <div className="text-xs mt-1">أضف أول معتمر بالضغط على زر «إضافة عميل جديد».</div>
                     </td>
@@ -360,10 +366,11 @@ export default function UmrahPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2">{c.agent}</td>
+                      <td className="px-3 py-2">{c.client || "—"}</td>
                       <td className="px-3 py-2">
                         <div>{formatDate(c.issueDate)}</div>
                         <div className="text-xs text-muted-foreground">
-                          {c.stayDuration} يوم | {c.issuingAuthority}
+                          {c.stayDuration} يوم
                         </div>
                       </td>
                       <td className="px-3 py-2" dir="ltr">{fmt(c.purchasePrice)}</td>
@@ -444,9 +451,8 @@ export default function UmrahPage() {
               <DialogTitle>{editing ? "تعديل بيانات المعتمر" : "إضافة معتمر جديد"}</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-2 overflow-visible">
-              <Field label="اسم العميل" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
+              <Field label="اسم الجواز" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
               <Field label="رقم الجواز" required ltr value={form.passportNumber} onChange={(v) => setForm((f: any) => ({ ...f, passportNumber: v }))} error={errors.passportNumber} />
-              <Field label="رقم الجوال" required ltr value={form.phone} onChange={(v) => setForm((f: any) => ({ ...f, phone: v }))} error={errors.phone} />
               <div className="space-y-1.5">
                 <Label>الوكيل<span className="text-destructive mr-1">*</span></Label>
                 <Input
@@ -462,10 +468,11 @@ export default function UmrahPage() {
                 </datalist>
                 {errors.agent && <p className="text-xs text-destructive">{errors.agent}</p>}
               </div>
+              <Field label="اسم العميل (يُقيَّد عليه البيع في كشف الحساب)" placeholder="اتركه فارغاً إن لم يوجد" value={form.client} onChange={(v) => setForm((f: any) => ({ ...f, client: v }))} />
+              <Field label="رقم الجوال" required ltr value={form.phone} onChange={(v) => setForm((f: any) => ({ ...f, phone: v }))} error={errors.phone} />
               <Field label="تاريخ الإصدار" required type="date" value={form.issueDate} onChange={(v) => setForm((f: any) => ({ ...f, issueDate: v }))} error={errors.issueDate} />
               <Field label="مدة الإقامة (يوم)" required type="number" value={String(form.stayDuration)} onChange={(v) => setForm((f: any) => ({ ...f, stayDuration: v === "" ? "" : Number(v) }))} error={errors.stayDuration} />
               <Field label="تاريخ دخول المملكة (اختياري)" type="date" value={form.entryDate} onChange={(v) => setForm((f: any) => ({ ...f, entryDate: v }))} />
-              <Field label="جهة الإصدار" required value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} error={errors.issuingAuthority} />
               <Field label="ترحيل عبر (يظهر في السند)" placeholder="ترحيل عبر" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
               <div className="space-y-1.5">
                 <Label>حالة الإرسال</Label>
@@ -481,6 +488,7 @@ export default function UmrahPage() {
               </div>
               <Field label="سعر الشراء" required type="number" min={0} value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: v === "" ? "" : Number(v) }))} error={errors.purchasePrice} />
               <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
+              <Field label="الرصيد الافتتاحي للعميل (اختياري)" type="number" value={String(form.openingBalance)} onChange={(v) => setForm((f: any) => ({ ...f, openingBalance: v }))} error={errors.openingBalance} />
               <Field label="ملاحظات" value={form.notes} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
             </div>
             <DialogFooter>
