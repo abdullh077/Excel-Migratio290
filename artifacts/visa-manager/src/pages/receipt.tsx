@@ -90,7 +90,14 @@ export default function ReceiptPage() {
       </div>
 
       <div className="max-w-2xl mx-auto p-6">
-        <div className="bg-white border rounded-lg shadow-sm p-8 print:shadow-none print:border-0 print:rounded-none print:p-6">
+        <div className="relative overflow-hidden bg-white border rounded-lg shadow-sm p-8 print:shadow-none print:border-0 print:rounded-none print:p-6">
+          {/* Watermark — office logo as transparent background */}
+          {officeLogo && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
+              <img src={officeLogo} alt="" className="w-[70%] max-w-[420px] opacity-[0.06] object-contain" />
+            </div>
+          )}
+          <div className="relative">
           {/* Header */}
           <div className="flex items-start justify-between border-b pb-4 mb-6">
             {/* Office identity — right side (first in RTL) */}
@@ -185,6 +192,7 @@ export default function ReceiptPage() {
             <p>نسعد بخدمتكم ونتمنى لكم رحلة موفقة</p>
             <p>تمت الطباعة بواسطة نظام عبور الذكي</p>
           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -195,7 +203,7 @@ function Field({ label, value, ltr = false }: { label: string; value: string; lt
   return (
     <div>
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <p className="text-sm font-medium" dir={ltr ? "ltr" : undefined}>{value ?? "—"}</p>
+      <p className={"text-sm font-medium" + (ltr ? " text-right" : "")} dir={ltr ? "ltr" : undefined}>{value ?? "—"}</p>
     </div>
   );
 }

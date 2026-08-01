@@ -105,13 +105,13 @@ export default function DashboardPage() {
         {/* KPI grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1 */}
-          <div className="relative overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-primary to-accent" />
+          <div className="oboor-hero relative overflow-hidden rounded-xl text-white shadow-md p-5">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-[hsl(43,65%,52%)] to-[hsl(43,85%,65%)]" />
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي عملاء العمرة</p>
+                <p className="text-sm text-white/70">إجمالي عملاء العمرة</p>
                 <p className="mt-2 text-3xl font-bold" dir="ltr">{om(stats.umrahTotal)}</p>
-                <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="mt-3 flex items-center gap-4 text-xs text-white/70">
                   <span className="inline-flex items-center gap-1">
                     <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
                     داخل: {om(stats.umrahInsideKsa)}
@@ -129,13 +129,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 2 */}
-          <div className="relative overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-accent to-primary" />
+          <div className="oboor-hero relative overflow-hidden rounded-xl text-white shadow-md p-5">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-[hsl(43,85%,65%)] to-[hsl(43,65%,52%)]" />
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي التأشيرات الأخرى</p>
+                <p className="text-sm text-white/70">إجمالي التأشيرات الأخرى</p>
                 <p className="mt-2 text-3xl font-bold" dir="ltr">{om(stats.visasTotal)}</p>
-                <p className="mt-3 text-xs text-muted-foreground">التأشيرات غير العمرة</p>
+                <p className="mt-3 text-xs text-white/70">التأشيرات غير العمرة</p>
               </div>
               <div className="rounded-xl bg-gradient-to-br from-accent via-accent to-primary p-3.5 text-white shadow-md ring-2 ring-primary/20">
                 <FileText className="w-7 h-7" />
@@ -144,13 +144,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 3 */}
-          <div className="relative overflow-hidden rounded-xl border bg-green-50/40 dark:bg-green-950/20 text-card-foreground shadow-sm p-5">
+          <div className="oboor-hero relative overflow-hidden rounded-xl text-white shadow-md p-5">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-green-500 to-emerald-400" />
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي الأرباح</p>
-                <p className="mt-2 text-3xl font-bold text-green-600" dir="ltr">{om(stats.totalProfit)}</p>
-                <p className="mt-3 text-xs text-muted-foreground">
+                <p className="text-sm text-white/70">إجمالي الأرباح</p>
+                <p className="mt-2 text-3xl font-bold text-emerald-300" dir="ltr">{om(stats.totalProfit)}</p>
+                <p className="mt-3 text-xs text-white/70">
                   العمرة: {om(stats.umrahTotalProfit)} | أخرى: {om(stats.visasTotalProfit)}
                 </p>
               </div>
@@ -161,13 +161,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 4 */}
-          <div className="relative overflow-hidden rounded-xl border bg-amber-50/40 dark:bg-amber-950/20 text-card-foreground shadow-sm p-5">
+          <div className="oboor-hero relative overflow-hidden rounded-xl text-white shadow-md p-5">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-yellow-400" />
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">مبالغ مستحقة (تأشيرات)</p>
-                <p className="mt-2 text-3xl font-bold text-amber-600" dir="ltr">{om(stats.visasTotalClientBalance)}</p>
-                <p className="mt-3 text-xs text-muted-foreground">
+                <p className="text-sm text-white/70">مبالغ مستحقة (تأشيرات)</p>
+                <p className="mt-2 text-3xl font-bold text-amber-300" dir="ltr">{om(stats.visasTotalClientBalance)}</p>
+                <p className="mt-3 text-xs text-white/70">
                   بواقي على الوكلاء: {om(stats.visasTotalAgentBalance)}
                 </p>
               </div>

@@ -306,6 +306,12 @@
     display: none !important;
   }
 
+  .voucher-print,
+  .voucher-print * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body {
     background: white;
     color: black;

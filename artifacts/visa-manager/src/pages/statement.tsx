@@ -181,6 +181,7 @@ export default function StatementPage() {
   const [vAmount, setVAmount] = useState("");
   const [vDesc, setVDesc] = useState("");
   const [vDate, setVDate] = useState(todayISO());
+  const [vAgent, setVAgent] = useState<string>("");
   const [printVoucher, setPrintVoucher] = useState<any>(null);
 
   const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
@@ -308,7 +309,7 @@ export default function StatementPage() {
     mutationFn: () =>
       createVoucher({
         kind: voucherKind,
-        partyType: "other",
+        partyType: vAgent && vParty.trim() === vAgent ? "agent" : "other",
         partyName: vParty.trim(),
         amount: Number(vAmount),
         description: vDesc.trim() || undefined,
@@ -321,6 +322,7 @@ export default function StatementPage() {
       setVAmount("");
       setVDesc("");
       setVDate(todayISO());
+      setVAgent("");
       toast({ title: voucherKind === "receipt" ? "تم إنشاء سند القبض" : "تم إنشاء سند الصرف" });
     },
     onError,
@@ -341,6 +343,7 @@ export default function StatementPage() {
     setVAmount("");
     setVDesc("");
     setVDate(todayISO());
+    setVAgent("");
     setVoucherDialog(true);
   };
 
@@ -1110,11 +1113,39 @@ export default function StatementPage() {
             </DialogHeader>
             <div className="space-y-3">
               <div>
+                <p className="text-sm mb-1.5 font-medium">ربط بحساب وكيل (اختياري)</p>
+                <Select
+                  value={vAgent || "none"}
+                  onValueChange={(v) => {
+                    if (v === "none") {
+                      setVAgent("");
+                    } else {
+                      setVAgent(v);
+                      setVParty(v);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="بدون ربط" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون ربط</SelectItem>
+                    {((agents as any[] | undefined) ?? []).map((a) => (
+                      <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">عند الربط سيظهر السند في كشف حساب الوكيل</p>
+              </div>
+              <div>
                 <p className="text-sm mb-1.5 font-medium">اسم الطرف</p>
                 <Input
                   list="voucher-party-list"
                   value={vParty}
-                  onChange={(e) => setVParty(e.target.value)}
+                  onChange={(e) => {
+                    setVParty(e.target.value);
+                    if (vAgent && e.target.value.trim() !== vAgent) setVAgent("");
+                  }}
                   placeholder="اسم الوكيل أو العميل أو الجهة"
                 />
                 <datalist id="voucher-party-list">
@@ -1170,50 +1201,81 @@ export default function StatementPage() {
               </DialogTitle>
             </DialogHeader>
             {printVoucher && (
-              <div className="voucher-print space-y-5 p-2">
-                <div className="text-center border-b border-black pb-3">
-                  <p className="text-xl font-bold">{office?.officeName || "المكتب"}</p>
-                  {office?.officePhone && <p className="text-sm mt-1">هاتف: {office.officePhone}</p>}
-                  <p className="text-lg font-bold mt-2">
+              <div className="voucher-print relative overflow-hidden space-y-5 p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white">
+                {/* Watermark — office logo */}
+                {office?.officeLogo && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
+                    <img src={office.officeLogo} alt="" className="w-[65%] max-w-[320px] opacity-[0.06] object-contain" />
+                  </div>
+                )}
+                <div className="relative space-y-5">
+                {/* Office header — like the regular receipt */}
+                <div className="flex items-start justify-between border-b-2 border-[hsl(43,65%,52%)] pb-3">
+                  <div className="flex items-center gap-3">
+                    {office?.officeLogo && (
+                      <img src={office.officeLogo} alt="شعار المكتب" className="h-14 w-14 object-contain" />
+                    )}
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-[hsl(220,40%,18%)]">{office?.officeName || "المكتب"}</p>
+                      <p className="text-xs text-gray-500">للنقل والسفريات والسياحة</p>
+                      {office?.officePhone && (
+                        <p className="text-xs text-gray-500" dir="ltr">{office.officePhone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-left text-xs text-gray-600">
+                    <p>رقم السند: {printVoucher.id}</p>
+                    <p className="mt-1">التاريخ: {La(printVoucher.voucherDate)}</p>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <p className="inline-block rounded-md bg-[hsl(220,40%,18%)] text-white px-6 py-1.5 text-lg font-bold border-2 border-[hsl(43,65%,52%)]">
                     {printVoucher.kind === "receipt" ? "سند قبض نقدية" : "سند صرف نقدية"}
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span>رقم السند: {printVoucher.id}</span>
-                  <span>التاريخ: {La(printVoucher.voucherDate)}</span>
-                </div>
-
                 <div className="text-sm">
-                  <span className="font-semibold">
-                    {printVoucher.kind === "receipt" ? "استلمنا من السيد/ة: " : "صرفنا للسيد/ة: "}
+                  <span className="font-semibold text-[hsl(220,40%,18%)]">
+                    {printVoucher.kind === "receipt" ? "استلمنا من الأخ: " : "صرفنا للأخ: "}
                   </span>
                   {printVoucher.partyName}
+                  {printVoucher.partyType === "agent" && (
+                    <span className="mr-2 text-xs text-[hsl(43,50%,40%)]">(وكيل)</span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">المبلغ:</span>
-                  <span className="border-2 border-black rounded px-4 py-2 font-bold text-lg">
+                  <span className="text-sm font-semibold text-[hsl(220,40%,18%)]">المبلغ:</span>
+                  <span className="border-2 border-[hsl(43,65%,52%)] bg-[hsl(43,65%,52%)]/10 text-[hsl(220,40%,18%)] rounded px-4 py-2 font-bold text-lg">
                     {nt(Number(printVoucher.amount))}
                   </span>
                 </div>
 
                 {printVoucher.description && (
                   <div className="text-sm">
-                    <span className="font-semibold">وذلك عن: </span>
+                    <span className="font-semibold text-[hsl(220,40%,18%)]">وذلك عن: </span>
                     {printVoucher.description}
                   </div>
                 )}
 
-                <div className="flex justify-between pt-10 text-sm">
+                <div className="flex justify-between pt-6 text-sm">
                   <div className="text-center">
-                    <p>توقيع المستلم</p>
-                    <p className="mt-8 border-t border-black w-32">&nbsp;</p>
+                    <p className="text-[hsl(220,40%,18%)] font-medium">توقيع المستلم</p>
+                    <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
                   </div>
                   <div className="text-center">
-                    <p>توقيع المحاسب</p>
-                    <p className="mt-8 border-t border-black w-32">&nbsp;</p>
+                    <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                      {office?.signatureImage && (
+                        <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
+                      )}
+                      {office?.stampImage && (
+                        <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
+                      )}
+                    </div>
+                    <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
                   </div>
+                </div>
                 </div>
               </div>
             )}
