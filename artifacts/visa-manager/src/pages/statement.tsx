@@ -8,8 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer } from "lucide-react";
+import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from "xlsx";
 import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
 
 // Exact currency formatter as production `nt`
@@ -132,6 +133,51 @@ function BalanceBadge({ balance }: { balance: number }) {
       مسدَّد
     </Badge>
   );
+}
+
+// Export ledger statement to an RTL xlsx file (same columns as LedgerTable, with opening row and totals)
+function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: string) {
+  const opening = Number(ledger?.opening) || 0;
+  let run = opening;
+  const balLabel = (v: number) => (v > 0 ? `${Math.abs(v)} (عليه)` : v < 0 ? `${Math.abs(v)} (له)` : "0 (مسدَّد)");
+  const header = ["المرجع", "نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"];
+  const rows: any[][] = [
+    ["—", "الرصيد الافتتاحي", ledger?.from ? La(ledger.from) : "—", "رصيد ما قبل الفترة", "", "", balLabel(opening)],
+  ];
+  let totalDebit = 0;
+  let totalCredit = 0;
+  for (const e of ledger?.entries ?? []) {
+    const debit = Number(e.debit) || 0;
+    const credit = Number(e.credit) || 0;
+    run += debit - credit;
+    totalDebit += debit;
+    totalCredit += credit;
+    rows.push([e.ref, e.kind, La(e.date), e.description, debit || "", credit || "", balLabel(run)]);
+  }
+  const final = opening + totalDebit - totalCredit;
+  rows.push(["", "", "", "الإجمالي", totalDebit, totalCredit, balLabel(final)]);
+  rows.push([
+    "",
+    "",
+    "",
+    final > 0 ? `عليكم مبلغ ${nt(final)}` : final < 0 ? `لكم مبلغ ${nt(-final)}` : "الرصيد مسدَّد بالكامل — لا مستحقات",
+    "",
+    "",
+    "العملة: ريال سعودي",
+  ]);
+  const title = `كشف حساب تفصيلي للوكيل: ${agentName}`;
+  const period =
+    from || to
+      ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
+      : "عن كامل الفترة حتى تاريخه";
+  const ws = XLSX.utils.aoa_to_sheet([[title], [period], [], header, ...rows]);
+  ws["!cols"] = [{ wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب");
+  if (!wb.Workbook) wb.Workbook = {};
+  if (!wb.Workbook.Views) wb.Workbook.Views = [];
+  wb.Workbook.Views[0] = { RTL: true };
+  XLSX.writeFile(wb, `كشف حساب - ${agentName}.xlsx`);
 }
 
 // Ledger-style detailed statement table (كشف حساب تفصيلي بنمط دفتر الأستاذ)
@@ -1115,13 +1161,23 @@ export default function StatementPage() {
                     <p className="font-bold flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
                     </p>
-                    <Button
-                      size="sm"
-                      className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
-                      onClick={() => setPrintStatement(true)}
-                    >
-                      <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-white/10 border-[hsl(43,65%,52%)] text-white hover:bg-white/20 hover:text-white font-bold"
+                        onClick={() => detail?.ledger && exportLedgerXlsx(detail.ledger, detail.agent?.name ?? "", stmtFrom, stmtTo)}
+                      >
+                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                        onClick={() => setPrintStatement(true)}
+                      >
+                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                      </Button>
+                    </div>
                   </div>
                   <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
                     <div>
@@ -1200,6 +1256,12 @@ export default function StatementPage() {
             <DialogFooter className="gap-2 no-print">
               <Button variant="outline" onClick={() => setPrintStatement(false)}>
                 إغلاق
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => detail?.ledger && exportLedgerXlsx(detail.ledger, detail.agent?.name ?? "", stmtFrom, stmtTo)}
+              >
+                <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
               <Button onClick={() => window.print()}>
                 <Printer className="w-4 h-4 ml-1.5" /> طباعة
