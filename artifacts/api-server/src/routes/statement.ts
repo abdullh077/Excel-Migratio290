@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db, agentsTable, agentPaymentsTable, ledgerEntriesTable, umrahClientsTable, otherVisasTable, vouchersTable, clientAccountsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, ne, isNull, sql } from "drizzle-orm";
 import { requireOffice, requireOwner } from "../lib/auth.js";
 import {
   CreateAgentBody, UpdateAgentBody, UpdateAgentParams, DeleteAgentParams,
@@ -316,6 +316,21 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
     .where(eq(otherVisasTable.userId, officeId))
     .groupBy(otherVisasTable.clientName, otherVisasTable.phone);
 
+  // Standalone client vouchers (سندات قبض/صرف باسم العميل).
+  // Excludes agent vouchers and vouchers linked to agent payments to avoid
+  // double counting — those belong to the agent statement, not the client's.
+  // Note: "المقبوض من العميل" lives on the transaction itself; standalone
+  // vouchers are separate movements, so adding them here is not duplication.
+  const voucherRows = await db
+    .select({
+      partyName: vouchersTable.partyName,
+      receipts: sql<number>`coalesce(sum(case when kind='receipt' then amount::float else 0 end),0)::float`,
+      payments: sql<number>`coalesce(sum(case when kind='payment' then amount::float else 0 end),0)::float`,
+    })
+    .from(vouchersTable)
+    .where(and(eq(vouchersTable.userId, officeId), ne(vouchersTable.partyType, "agent"), isNull(vouchersTable.agentPaymentId)))
+    .groupBy(vouchersTable.partyName);
+
   const byName = new Map<string, any>();
   for (const r of visaRows) {
     const key = r.clientName;
@@ -325,13 +340,24 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
       prev.balance += r.balance; prev.txCount += r.txCount;
       prev.phone = prev.phone || r.phone;
     } else {
-      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, manualId: null });
+      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null });
     }
   }
   for (const m of manualRows) {
     const prev = byName.get(m.clientName);
     if (prev) { prev.manualId = m.id; prev.phone = prev.phone || m.phone; }
-    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: 0, txCount: 0, manualId: m.id });
+    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: 0, txCount: 0, voucherReceipts: 0, voucherPayments: 0, manualId: m.id });
+  }
+  // Fold vouchers into balances only for known client accounts (transaction
+  // clients or manual accounts) — vouchers for arbitrary "other" parties
+  // should not create client rows.
+  for (const v of voucherRows) {
+    const prev = byName.get(v.partyName);
+    if (!prev) continue;
+    prev.voucherReceipts = v.receipts;
+    prev.voucherPayments = v.payments;
+    // receipt = credit (لكم) → reduces what the client owes; payment = debit.
+    prev.balance += v.payments - v.receipts;
   }
 
   res.json([...byName.values()].sort((a, b) => a.clientName.localeCompare(b.clientName, "ar")));
@@ -352,7 +378,13 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.clientName, name)));
 
   const txRows = await db.select().from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.clientName, name))).orderBy(otherVisasTable.createdAt);
-  const vouchers = await db.select().from(vouchersTable).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyName, name))).orderBy(vouchersTable.voucherDate);
+  // Standalone client vouchers only — agent vouchers and vouchers linked to
+  // agent payments belong to the agent statement (avoids double counting).
+  const vouchers = await db.select().from(vouchersTable)
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyName, name), ne(vouchersTable.partyType, "agent"), isNull(vouchersTable.agentPaymentId)))
+    .orderBy(vouchersTable.voucherDate);
+  const voucherReceipts = vouchers.filter((v) => v.kind === "receipt").reduce((s, v) => s + (Number(v.amount) || 0), 0);
+  const voucherPayments = vouchers.filter((v) => v.kind === "payment").reduce((s, v) => s + (Number(v.amount) || 0), 0);
 
   // ---- Ledger view (كشف حساب تفصيلي) — same convention as agents ----
   // balance = Σ(sale − received) → debit = salePrice, credit = receivedFromClient.
@@ -388,6 +420,20 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
       }
       return rows;
     })
+    .concat(vouchers.map((v): LedgerRow => {
+      const isReceipt = v.kind === "receipt";
+      return {
+        ref: `S-${v.id}`,
+        kind: isReceipt ? "سند قبض" : "سند صرف",
+        date: v.voucherDate.toISOString(),
+        sortKey: v.voucherDate.getTime(),
+        description: isReceipt
+          ? `لكم مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
+          : `عليكم مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
+        debit: isReceipt ? 0 : Number(v.amount) || 0,
+        credit: isReceipt ? Number(v.amount) || 0 : 0,
+      };
+    }))
     .sort((a, b) => a.sortKey - b.sortKey);
 
   // Compare by UTC calendar day so period boundaries never depend on server timezone.
@@ -404,7 +450,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   const opening = before.reduce((s, m) => s + m.debit - m.credit, 0);
 
   res.json({
-    account: { clientName: name, phone: totals.phone, totalSales: totals.totalSales, totalReceived: totals.totalReceived, balance: totals.balance, txCount: totals.txCount },
+    account: { clientName: name, phone: totals.phone, totalSales: totals.totalSales, totalReceived: totals.totalReceived, voucherReceipts, voucherPayments, balance: totals.balance + voucherPayments - voucherReceipts, txCount: totals.txCount },
     transactions: txRows.map((r) => ({ id: r.id, clientName: r.clientName, type: r.visaType, issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: Number(r.receivedFromClient), createdAt: r.createdAt.toISOString() })),
     vouchers: vouchers.map((v) => ({ id: v.id, kind: v.kind, partyType: v.partyType, partyName: v.partyName, amount: Number(v.amount), description: v.description, voucherDate: v.voucherDate.toISOString(), agentPaymentId: v.agentPaymentId, createdAt: v.createdAt.toISOString() })),
     ledger: {

@@ -108,6 +108,12 @@ function ClientBalanceBadge({ balance }: { balance: number }) {
         عليه {nt(balance)}
       </Badge>
     );
+  if (balance < 0)
+    return (
+      <Badge className="text-xs bg-emerald-600 hover:bg-emerald-600">
+        له {nt(-balance)}
+      </Badge>
+    );
   return (
     <Badge variant="outline" className="text-xs">
       مسدَّد
@@ -461,6 +467,8 @@ export default function StatementPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      qc.invalidateQueries({ queryKey: ["statement-client"] });
       setVoucherDialog(false);
       setVParty("");
       setVAmount("");
@@ -476,6 +484,8 @@ export default function StatementPage() {
     mutationFn: (id: any) => deleteVoucher(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      qc.invalidateQueries({ queryKey: ["statement-client"] });
       toast({ title: "تم حذف السند" });
     },
     onError,
@@ -1305,6 +1315,13 @@ export default function StatementPage() {
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">المقبوض</p>
                     <p className="font-bold text-lg text-emerald-600">{nt(clientDetail.account.totalReceived)}</p>
+                    {(Number(clientDetail.account.voucherReceipts) > 0 || Number(clientDetail.account.voucherPayments) > 0) && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {Number(clientDetail.account.voucherReceipts) > 0 && <>+ سندات قبض {nt(clientDetail.account.voucherReceipts)}</>}
+                        {Number(clientDetail.account.voucherReceipts) > 0 && Number(clientDetail.account.voucherPayments) > 0 && " — "}
+                        {Number(clientDetail.account.voucherPayments) > 0 && <>سندات صرف {nt(clientDetail.account.voucherPayments)}</>}
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">الرصيد</p>
