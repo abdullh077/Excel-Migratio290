@@ -20,5 +20,6 @@ export interface OtherVisaUpdate {
   receivedFromClient?: number;
   transferredToAgent?: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
 }

@@ -21,6 +21,8 @@ export interface UmrahClient {
   sendStatus: string;
   status: string;
   /** @nullable */
+  transactionParty?: string | null;
+  /** @nullable */
   notes?: string | null;
   /** @nullable */
   entryDate?: string | null;

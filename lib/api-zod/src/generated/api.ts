@@ -27,7 +27,9 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.string()
+  "role": zod.string(),
+  "officeId": zod.number().optional(),
+  "expiresAt": zod.string().nullish()
 })
 
 
@@ -45,47 +47,480 @@ export const LogoutResponse = zod.object({
 export const GetMeResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.string()
+  "role": zod.string(),
+  "officeId": zod.number().optional(),
+  "expiresAt": zod.string().nullish()
 })
 
 
 /**
- * @summary List all users (admin only)
+ * @summary List all accounts (provider only)
  */
-export const ListUsersResponseItem = zod.object({
+export const ListAccountsResponseItem = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "role": zod.string(),
+  "parentUserId": zod.number().nullish(),
+  "expiresAt": zod.string().nullish(),
+  "officeName": zod.string().nullish(),
   "createdAt": zod.string()
 })
-export const ListUsersResponse = zod.array(ListUsersResponseItem)
+export const ListAccountsResponse = zod.array(ListAccountsResponseItem)
 
 
 /**
- * @summary Create a user (admin only)
+ * @summary Create an owner or sub account (provider only)
  */
-export const CreateUserBody = zod.object({
+export const CreateAccountBody = zod.object({
   "username": zod.string(),
   "password": zod.string(),
-  "role": zod.enum(['admin', 'user'])
+  "role": zod.enum(['owner', 'sub']),
+  "parentUserId": zod.number().optional(),
+  "expiresAt": zod.string().nullish()
 })
 
-export const CreateUserResponse = zod.object({
+export const CreateAccountResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "role": zod.string(),
+  "parentUserId": zod.number().nullish(),
+  "expiresAt": zod.string().nullish(),
+  "officeName": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
 
 /**
- * @summary Delete a user (admin only)
+ * @summary Delete an account (provider only)
  */
-export const DeleteUserParams = zod.object({
+export const DeleteAccountParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const DeleteUserResponse = zod.object({
+export const DeleteAccountResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Set/extend an owner account expiry (provider only)
+ */
+export const UpdateAccountExpiryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAccountExpiryBody = zod.object({
+  "expiresAt": zod.string().nullish()
+})
+
+export const UpdateAccountExpiryResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "role": zod.string(),
+  "parentUserId": zod.number().nullish(),
+  "expiresAt": zod.string().nullish(),
+  "officeName": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Change an account password (provider only)
+ */
+export const UpdateAccountPasswordParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAccountPasswordBody = zod.object({
+  "password": zod.string()
+})
+
+export const UpdateAccountPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Change an account username (provider only)
+ */
+export const UpdateAccountUsernameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAccountUsernameBody = zod.object({
+  "username": zod.string()
+})
+
+export const UpdateAccountUsernameResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary List agent names for form pickers (all office users)
+ */
+export const ListAgentNamesResponseItem = zod.string()
+export const ListAgentNamesResponse = zod.array(ListAgentNamesResponseItem)
+
+
+/**
+ * @summary List agents with balances (owner/provider only)
+ */
+export const ListAgentsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "paidFrom": zod.number(),
+  "paidTo": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number(),
+  "createdAt": zod.string()
+})
+export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
+
+
+/**
+ * @summary Register an agent
+ */
+export const CreateAgentBody = zod.object({
+  "name": zod.string(),
+  "phone": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateAgentResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "paidFrom": zod.number(),
+  "paidTo": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update an agent (rename re-tags transactions)
+ */
+export const UpdateAgentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAgentBody = zod.object({
+  "name": zod.string(),
+  "phone": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateAgentResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "paidFrom": zod.number(),
+  "paidTo": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete an agent (transactions keep the old name)
+ */
+export const DeleteAgentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAgentResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Agent statement — transactions, payments, balance
+ */
+export const GetAgentDetailsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAgentDetailsResponse = zod.object({
+  "agent": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "paidFrom": zod.number(),
+  "paidTo": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number(),
+  "createdAt": zod.string()
+}),
+  "transactions": zod.array(zod.object({
+  "id": zod.number(),
+  "clientName": zod.string(),
+  "type": zod.string(),
+  "issueDate": zod.string(),
+  "salePrice": zod.number(),
+  "receivedFromClient": zod.number().nullish(),
+  "createdAt": zod.string()
+})),
+  "payments": zod.array(zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "amount": zod.number(),
+  "direction": zod.string(),
+  "paidAt": zod.string(),
+  "notes": zod.string().nullish(),
+  "voucherId": zod.number().nullish(),
+  "createdAt": zod.string()
+})),
+  "vouchers": zod.array(zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary Record a payment with an agent (optionally issues a voucher)
+ */
+export const CreateAgentPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateAgentPaymentBody = zod.object({
+  "amount": zod.number(),
+  "direction": zod.enum(['from_agent', 'to_agent']),
+  "paidAt": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "createVoucher": zod.boolean().optional()
+})
+
+export const CreateAgentPaymentResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "amount": zod.number(),
+  "direction": zod.string(),
+  "paidAt": zod.string(),
+  "notes": zod.string().nullish(),
+  "voucherId": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete an agent payment
+ */
+export const DeleteAgentPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAgentPaymentResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Client accounts — balances grouped by client name
+ */
+export const ListClientAccountsResponseItem = zod.object({
+  "clientName": zod.string(),
+  "phone": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "totalReceived": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number()
+})
+export const ListClientAccountsResponse = zod.array(ListClientAccountsResponseItem)
+
+
+/**
+ * @summary Client statement — transactions and vouchers by client name
+ */
+export const GetClientDetailsQueryParams = zod.object({
+  "name": zod.coerce.string()
+})
+
+export const GetClientDetailsResponse = zod.object({
+  "account": zod.object({
+  "clientName": zod.string(),
+  "phone": zod.string().nullish(),
+  "totalSales": zod.number(),
+  "totalReceived": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number()
+}),
+  "transactions": zod.array(zod.object({
+  "id": zod.number(),
+  "clientName": zod.string(),
+  "type": zod.string(),
+  "issueDate": zod.string(),
+  "salePrice": zod.number(),
+  "receivedFromClient": zod.number().nullish(),
+  "createdAt": zod.string()
+})),
+  "vouchers": zod.array(zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary List general ledger entries
+ */
+export const ListLedgerResponseItem = zod.object({
+  "id": zod.number(),
+  "type": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string(),
+  "entryDate": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListLedgerResponse = zod.array(ListLedgerResponseItem)
+
+
+/**
+ * @summary Add a ledger entry
+ */
+export const CreateLedgerEntryBody = zod.object({
+  "type": zod.enum(['income', 'expense']),
+  "amount": zod.number(),
+  "description": zod.string(),
+  "entryDate": zod.string().optional()
+})
+
+export const CreateLedgerEntryResponse = zod.object({
+  "id": zod.number(),
+  "type": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string(),
+  "entryDate": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a ledger entry
+ */
+export const DeleteLedgerEntryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteLedgerEntryResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Monthly income/expense summary (transactions + ledger)
+ */
+export const GetStatementSummaryResponseItem = zod.object({
+  "month": zod.string(),
+  "income": zod.number(),
+  "expense": zod.number(),
+  "net": zod.number()
+})
+export const GetStatementSummaryResponse = zod.array(GetStatementSummaryResponseItem)
+
+
+/**
+ * @summary List vouchers
+ */
+export const ListVouchersQueryParams = zod.object({
+  "kind": zod.coerce.string().optional(),
+  "party": zod.coerce.string().optional()
+})
+
+export const ListVouchersResponseItem = zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+export const ListVouchersResponse = zod.array(ListVouchersResponseItem)
+
+
+/**
+ * @summary Create a standalone voucher
+ */
+export const CreateVoucherBody = zod.object({
+  "kind": zod.enum(['receipt', 'payment']),
+  "partyType": zod.enum(['agent', 'client', 'other']),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().optional(),
+  "voucherDate": zod.string().optional()
+})
+
+export const CreateVoucherResponse = zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Get a voucher
+ */
+export const GetVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetVoucherResponse = zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a voucher
+ */
+export const DeleteVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteVoucherResponse = zod.object({
   "message": zod.string()
 })
 
@@ -115,6 +550,7 @@ export const ListUmrahClientsResponseItem = zod.object({
   "profit": zod.number(),
   "sendStatus": zod.string(),
   "status": zod.string(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "entryDate": zod.string().nullish(),
   "createdAt": zod.string()
@@ -136,8 +572,10 @@ export const CreateUmrahClientBody = zod.object({
   "purchasePrice": zod.number(),
   "salePrice": zod.number(),
   "sendStatus": zod.string(),
+  "transactionParty": zod.string().optional(),
   "notes": zod.string().optional(),
-  "entryDate": zod.string().optional()
+  "entryDate": zod.string().optional(),
+  "clientRequestId": zod.string().optional()
 })
 
 export const CreateUmrahClientResponse = zod.object({
@@ -154,6 +592,7 @@ export const CreateUmrahClientResponse = zod.object({
   "profit": zod.number(),
   "sendStatus": zod.string(),
   "status": zod.string(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "entryDate": zod.string().nullish(),
   "createdAt": zod.string()
@@ -181,6 +620,7 @@ export const GetUmrahClientResponse = zod.object({
   "profit": zod.number(),
   "sendStatus": zod.string(),
   "status": zod.string(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "entryDate": zod.string().nullish(),
   "createdAt": zod.string()
@@ -205,6 +645,7 @@ export const UpdateUmrahClientBody = zod.object({
   "purchasePrice": zod.number().optional(),
   "salePrice": zod.number().optional(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().optional(),
   "notes": zod.string().optional(),
   "entryDate": zod.string().optional()
 })
@@ -223,6 +664,7 @@ export const UpdateUmrahClientResponse = zod.object({
   "profit": zod.number(),
   "sendStatus": zod.string(),
   "status": zod.string(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "entryDate": zod.string().nullish(),
   "createdAt": zod.string()
@@ -270,6 +712,7 @@ export const ListVisasResponseItem = zod.object({
   "agentBalance": zod.number(),
   "profit": zod.number(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -293,7 +736,9 @@ export const CreateVisaBody = zod.object({
   "receivedFromClient": zod.number(),
   "transferredToAgent": zod.number(),
   "sendStatus": zod.string().optional(),
-  "notes": zod.string().optional()
+  "transactionParty": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "clientRequestId": zod.string().optional()
 })
 
 export const CreateVisaResponse = zod.object({
@@ -314,6 +759,7 @@ export const CreateVisaResponse = zod.object({
   "agentBalance": zod.number(),
   "profit": zod.number(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -344,6 +790,7 @@ export const GetVisaResponse = zod.object({
   "agentBalance": zod.number(),
   "profit": zod.number(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -370,6 +817,7 @@ export const UpdateVisaBody = zod.object({
   "receivedFromClient": zod.number().optional(),
   "transferredToAgent": zod.number().optional(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().optional(),
   "notes": zod.string().optional()
 })
 
@@ -391,6 +839,7 @@ export const UpdateVisaResponse = zod.object({
   "agentBalance": zod.number(),
   "profit": zod.number(),
   "sendStatus": zod.string().optional(),
+  "transactionParty": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -512,6 +961,9 @@ export const GetOfficeSettingsResponse = zod.object({
   "officePhone": zod.string(),
   "officePhone2": zod.string(),
   "officeAddress": zod.string(),
+  "officeLogo": zod.string().nullish(),
+  "stampImage": zod.string().nullish(),
+  "signatureImage": zod.string().nullish(),
   "whatsappUmrahTemplate": zod.string(),
   "whatsappOtherTemplate": zod.string(),
   "configured": zod.boolean()
@@ -526,6 +978,9 @@ export const UpdateOfficeSettingsBody = zod.object({
   "officePhone": zod.string().optional(),
   "officePhone2": zod.string().optional(),
   "officeAddress": zod.string().optional(),
+  "officeLogo": zod.string().nullish(),
+  "stampImage": zod.string().nullish(),
+  "signatureImage": zod.string().nullish(),
   "whatsappUmrahTemplate": zod.string().optional(),
   "whatsappOtherTemplate": zod.string().optional(),
   "configured": zod.boolean().optional()
@@ -536,6 +991,9 @@ export const UpdateOfficeSettingsResponse = zod.object({
   "officePhone": zod.string(),
   "officePhone2": zod.string(),
   "officeAddress": zod.string(),
+  "officeLogo": zod.string().nullish(),
+  "stampImage": zod.string().nullish(),
+  "signatureImage": zod.string().nullish(),
   "whatsappUmrahTemplate": zod.string(),
   "whatsappOtherTemplate": zod.string(),
   "configured": zod.boolean()

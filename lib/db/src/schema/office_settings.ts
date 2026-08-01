@@ -13,6 +13,8 @@ export const officeSettingsTable = pgTable("office_settings", {
   officePhone2: text("office_phone2"),
   officeAddress: text("office_address"),
   officeLogo: text("office_logo"), // base64 data URL — office/login logo (white-label)
+  stampImage: text("stamp_image"), // base64 data URL — official stamp shown on vouchers/receipts
+  signatureImage: text("signature_image"), // base64 data URL — signature shown on vouchers/receipts
   whatsappUmrahTemplate: text("whatsapp_umrah_template"),
   whatsappOtherTemplate: text("whatsapp_other_template"),
   configured: boolean("configured").notNull().default(false), // first-run prompt flag

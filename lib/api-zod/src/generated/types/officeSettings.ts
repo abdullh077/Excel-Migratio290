@@ -11,6 +11,12 @@ export interface OfficeSettings {
   officePhone: string;
   officePhone2: string;
   officeAddress: string;
+  /** @nullable */
+  officeLogo?: string | null;
+  /** @nullable */
+  stampImage?: string | null;
+  /** @nullable */
+  signatureImage?: string | null;
   whatsappUmrahTemplate: string;
   whatsappOtherTemplate: string;
   configured: boolean;

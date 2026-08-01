@@ -20,8 +20,12 @@ tags:
     description: Dashboard statistics
   - name: archive
     description: Archive records
-  - name: users
-    description: User management
+  - name: provider
+    description: Provider account management
+  - name: statement
+    description: Agent & client statements, ledger
+  - name: vouchers
+    description: Receipt/payment vouchers
   - name: settings
     description: Office settings
 paths:
@@ -95,43 +99,459 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /users:
+  /provider/accounts:
     get:
-      operationId: listUsers
-      tags: [users]
-      summary: List all users (admin only)
+      operationId: listAccounts
+      tags: [provider]
+      summary: List all accounts (provider only)
       responses:
         "200":
-          description: List of users
+          description: List of accounts
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/AppUser"
+                  $ref: "#/components/schemas/Account"
     post:
-      operationId: createUser
-      tags: [users]
-      summary: Create a user (admin only)
+      operationId: createAccount
+      tags: [provider]
+      summary: Create an owner or sub account (provider only)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserInput"
+              $ref: "#/components/schemas/AccountInput"
       responses:
         "201":
-          description: User created
+          description: Account created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AppUser"
+                $ref: "#/components/schemas/Account"
 
-  /users/{id}:
+  /provider/accounts/{id}:
     delete:
-      operationId: deleteUser
-      tags: [users]
-      summary: Delete a user (admin only)
+      operationId: deleteAccount
+      tags: [provider]
+      summary: Delete an account (provider only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /provider/accounts/{id}/expiry:
+    patch:
+      operationId: updateAccountExpiry
+      tags: [provider]
+      summary: Set/extend an owner account expiry (provider only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountExpiryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /provider/accounts/{id}/password:
+    patch:
+      operationId: updateAccountPassword
+      tags: [provider]
+      summary: Change an account password (provider only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountPasswordInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /provider/accounts/{id}/username:
+    patch:
+      operationId: updateAccountUsername
+      tags: [provider]
+      summary: Change an account username (provider only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUsernameInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /statement/agent-names:
+    get:
+      operationId: listAgentNames
+      tags: [statement]
+      summary: List agent names for form pickers (all office users)
+      responses:
+        "200":
+          description: Agent names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /statement/agents:
+    get:
+      operationId: listAgents
+      tags: [statement]
+      summary: List agents with balances (owner/provider only)
+      responses:
+        "200":
+          description: Agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentAccount"
+    post:
+      operationId: createAgent
+      tags: [statement]
+      summary: Register an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAccount"
+
+  /statement/agents/{id}:
+    put:
+      operationId: updateAgent
+      tags: [statement]
+      summary: Update an agent (rename re-tags transactions)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAccount"
+    delete:
+      operationId: deleteAgent
+      tags: [statement]
+      summary: Delete an agent (transactions keep the old name)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /statement/agents/{id}/details:
+    get:
+      operationId: getAgentDetails
+      tags: [statement]
+      summary: Agent statement — transactions, payments, balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentDetails"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /statement/agents/{id}/payments:
+    post:
+      operationId: createAgentPayment
+      tags: [statement]
+      summary: Record a payment with an agent (optionally issues a voucher)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentPaymentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPayment"
+
+  /statement/payments/{id}:
+    delete:
+      operationId: deleteAgentPayment
+      tags: [statement]
+      summary: Delete an agent payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /statement/clients:
+    get:
+      operationId: listClientAccounts
+      tags: [statement]
+      summary: Client accounts — balances grouped by client name
+      responses:
+        "200":
+          description: Client accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientAccount"
+
+  /statement/clients/details:
+    get:
+      operationId: getClientDetails
+      tags: [statement]
+      summary: Client statement — transactions and vouchers by client name
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetails"
+
+  /statement/ledger:
+    get:
+      operationId: listLedger
+      tags: [statement]
+      summary: List general ledger entries
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+    post:
+      operationId: createLedgerEntry
+      tags: [statement]
+      summary: Add a ledger entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerEntryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
+
+  /statement/ledger/{id}:
+    delete:
+      operationId: deleteLedgerEntry
+      tags: [statement]
+      summary: Delete a ledger entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /statement/summary:
+    get:
+      operationId: getStatementSummary
+      tags: [statement]
+      summary: Monthly income/expense summary (transactions + ledger)
+      responses:
+        "200":
+          description: Monthly summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatementMonth"
+
+  /vouchers:
+    get:
+      operationId: listVouchers
+      tags: [vouchers]
+      summary: List vouchers
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+        - name: party
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Vouchers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Voucher"
+    post:
+      operationId: createVoucher
+      tags: [vouchers]
+      summary: Create a standalone voucher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoucherInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voucher"
+
+  /vouchers/{id}:
+    get:
+      operationId: getVoucher
+      tags: [vouchers]
+      summary: Get a voucher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Voucher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voucher"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteVoucher
+      tags: [vouchers]
+      summary: Delete a voucher
       parameters:
         - name: id
           in: path
@@ -549,8 +969,12 @@ components:
           type: string
         role:
           type: string
+        officeId:
+          type: integer
+        expiresAt:
+          type: ["string", "null"]
 
-    AppUser:
+    Account:
       type: object
       required: [id, username, role, createdAt]
       properties:
@@ -560,10 +984,16 @@ components:
           type: string
         role:
           type: string
+        parentUserId:
+          type: ["integer", "null"]
+        expiresAt:
+          type: ["string", "null"]
+        officeName:
+          type: ["string", "null"]
         createdAt:
           type: string
 
-    UserInput:
+    AccountInput:
       type: object
       required: [username, password, role]
       properties:
@@ -573,7 +1003,260 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, user]
+          enum: [owner, sub]
+        parentUserId:
+          type: integer
+        expiresAt:
+          type: ["string", "null"]
+
+    AccountExpiryInput:
+      type: object
+      properties:
+        expiresAt:
+          type: ["string", "null"]
+
+    AccountPasswordInput:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+
+    AccountUsernameInput:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+
+    AgentAccount:
+      type: object
+      required: [id, name, totalSales, paidFrom, paidTo, balance, txCount, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        totalSales:
+          type: number
+        paidFrom:
+          type: number
+        paidTo:
+          type: number
+        balance:
+          type: number
+        txCount:
+          type: integer
+        createdAt:
+          type: string
+
+    AgentInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        notes:
+          type: string
+
+    AgentPayment:
+      type: object
+      required: [id, agentId, amount, direction, paidAt, createdAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        amount:
+          type: number
+        direction:
+          type: string
+        paidAt:
+          type: string
+        notes:
+          type: ["string", "null"]
+        voucherId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    AgentPaymentInput:
+      type: object
+      required: [amount, direction]
+      properties:
+        amount:
+          type: number
+        direction:
+          type: string
+          enum: [from_agent, to_agent]
+        paidAt:
+          type: string
+        notes:
+          type: string
+        createVoucher:
+          type: boolean
+
+    StatementTx:
+      type: object
+      required: [id, clientName, type, issueDate, salePrice, createdAt]
+      properties:
+        id:
+          type: integer
+        clientName:
+          type: string
+        type:
+          type: string
+        issueDate:
+          type: string
+        salePrice:
+          type: number
+        receivedFromClient:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+
+    AgentDetails:
+      type: object
+      required: [agent, transactions, payments, vouchers]
+      properties:
+        agent:
+          $ref: "#/components/schemas/AgentAccount"
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementTx"
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentPayment"
+        vouchers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Voucher"
+
+    ClientAccount:
+      type: object
+      required: [clientName, totalSales, totalReceived, balance, txCount]
+      properties:
+        clientName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        totalSales:
+          type: number
+        totalReceived:
+          type: number
+        balance:
+          type: number
+        txCount:
+          type: integer
+
+    ClientDetails:
+      type: object
+      required: [account, transactions, vouchers]
+      properties:
+        account:
+          $ref: "#/components/schemas/ClientAccount"
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementTx"
+        vouchers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Voucher"
+
+    LedgerEntry:
+      type: object
+      required: [id, type, amount, description, entryDate, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        amount:
+          type: number
+        description:
+          type: string
+        entryDate:
+          type: string
+        createdAt:
+          type: string
+
+    LedgerEntryInput:
+      type: object
+      required: [type, amount, description]
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: number
+        description:
+          type: string
+        entryDate:
+          type: string
+
+    StatementMonth:
+      type: object
+      required: [month, income, expense, net]
+      properties:
+        month:
+          type: string
+        income:
+          type: number
+        expense:
+          type: number
+        net:
+          type: number
+
+    Voucher:
+      type: object
+      required: [id, kind, partyType, partyName, amount, voucherDate, createdAt]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        partyType:
+          type: string
+        partyName:
+          type: string
+        amount:
+          type: number
+        description:
+          type: ["string", "null"]
+        voucherDate:
+          type: string
+        agentPaymentId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    VoucherInput:
+      type: object
+      required: [kind, partyType, partyName, amount]
+      properties:
+        kind:
+          type: string
+          enum: [receipt, payment]
+        partyType:
+          type: string
+          enum: [agent, client, other]
+        partyName:
+          type: string
+        amount:
+          type: number
+        description:
+          type: string
+        voucherDate:
+          type: string
 
     UmrahClient:
       type: object
@@ -605,6 +1288,8 @@ components:
           type: string
         status:
           type: string
+        transactionParty:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         entryDate:
@@ -636,9 +1321,13 @@ components:
           type: number
         sendStatus:
           type: string
+        transactionParty:
+          type: string
         notes:
           type: string
         entryDate:
+          type: string
+        clientRequestId:
           type: string
 
     UmrahClientUpdate:
@@ -663,6 +1352,8 @@ components:
         salePrice:
           type: number
         sendStatus:
+          type: string
+        transactionParty:
           type: string
         notes:
           type: string
@@ -707,6 +1398,8 @@ components:
           type: number
         sendStatus:
           type: string
+        transactionParty:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         createdAt:
@@ -742,7 +1435,11 @@ components:
           type: number
         sendStatus:
           type: string
+        transactionParty:
+          type: string
         notes:
+          type: string
+        clientRequestId:
           type: string
 
     OtherVisaUpdate:
@@ -773,6 +1470,8 @@ components:
         transferredToAgent:
           type: number
         sendStatus:
+          type: string
+        transactionParty:
           type: string
         notes:
           type: string
@@ -906,6 +1605,12 @@ components:
           type: string
         officeAddress:
           type: string
+        officeLogo:
+          type: ["string", "null"]
+        stampImage:
+          type: ["string", "null"]
+        signatureImage:
+          type: ["string", "null"]
         whatsappUmrahTemplate:
           type: string
         whatsappOtherTemplate:
@@ -924,6 +1629,12 @@ components:
           type: string
         officeAddress:
           type: string
+        officeLogo:
+          type: ["string", "null"]
+        stampImage:
+          type: ["string", "null"]
+        signatureImage:
+          type: ["string", "null"]
         whatsappUmrahTemplate:
           type: string
         whatsappOtherTemplate:

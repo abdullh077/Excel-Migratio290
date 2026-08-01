@@ -25,6 +25,8 @@ export interface OtherVisa {
   profit: number;
   sendStatus?: string;
   /** @nullable */
+  transactionParty?: string | null;
+  /** @nullable */
   notes?: string | null;
   createdAt: string;
 }

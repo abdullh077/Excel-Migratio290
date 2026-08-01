@@ -20,5 +20,7 @@ export interface OtherVisaInput {
   receivedFromClient: number;
   transferredToAgent: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
+  clientRequestId?: string;
 }

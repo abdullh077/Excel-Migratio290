@@ -1,0 +1,95 @@
+import { Router } from "express";
+import { db, otherVisasTable } from "@workspace/db";
+import { eq, and, ilike, sql } from "drizzle-orm";
+import { requireOffice } from "../lib/auth.js";
+import {
+  CreateVisaBody,
+  UpdateVisaBody,
+  UpdateVisaParams,
+  DeleteVisaParams,
+  GetVisaParams,
+  ListVisasQueryParams,
+} from "@workspace/api-zod";
+
+const router = Router();
+router.use(requireOffice);
+
+function toVisa(r: typeof otherVisasTable.$inferSelect) {
+  const sale = Number(r.salePrice);
+  const purchase = Number(r.purchasePrice);
+  const received = Number(r.receivedFromClient);
+  const transferred = Number(r.transferredToAgent);
+  return {
+    ...r,
+    purchasePrice: purchase,
+    salePrice: sale,
+    receivedFromClient: received,
+    transferredToAgent: transferred,
+    clientBalance: sale - received,
+    agentBalance: purchase - transferred,
+    profit: sale - purchase,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+router.get("/visas", async (req, res): Promise<void> => {
+  const q = ListVisasQueryParams.safeParse(req.query);
+  const officeId = req.session.officeId!;
+  let query = db.select().from(otherVisasTable).where(eq(otherVisasTable.userId, officeId)).$dynamic();
+  if (q.success) {
+    const { search, visaType, agent, month, year } = q.data;
+    if (search) query = query.where(and(eq(otherVisasTable.userId, officeId), ilike(otherVisasTable.clientName, `%${search}%`)));
+    if (visaType) query = query.where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.visaType, visaType)));
+    if (agent) query = query.where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent)));
+    if (month && year) query = query.where(and(eq(otherVisasTable.userId, officeId), sql`EXTRACT(MONTH FROM ${otherVisasTable.createdAt}) = ${month}`, sql`EXTRACT(YEAR FROM ${otherVisasTable.createdAt}) = ${year}`));
+  }
+  const rows = await query.orderBy(sql`${otherVisasTable.createdAt} DESC`);
+  res.json(rows.map(toVisa));
+});
+
+router.post("/visas", async (req, res): Promise<void> => {
+  const parsed = CreateVisaBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const officeId = req.session.officeId!;
+  const { clientRequestId, ...rest } = parsed.data as any;
+  const [row] = await db.insert(otherVisasTable).values({ ...rest, userId: officeId, clientRequestId: clientRequestId ?? null }).onConflictDoNothing().returning();
+  if (!row) {
+    if (clientRequestId) {
+      const [existing] = await db.select().from(otherVisasTable).where(eq(otherVisasTable.clientRequestId, clientRequestId));
+      if (existing) { res.status(201).json(toVisa(existing)); return; }
+    }
+    res.status(409).json({ error: "Conflict" }); return;
+  }
+  res.status(201).json(toVisa(row));
+});
+
+router.get("/visas/:id", async (req, res): Promise<void> => {
+  const params = GetVisaParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(otherVisasTable).where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, req.session.officeId!)));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(toVisa(row));
+});
+
+router.put("/visas/:id", async (req, res): Promise<void> => {
+  const params = UpdateVisaParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = UpdateVisaBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const values: Record<string, unknown> = { ...parsed.data };
+  if (values.clientRequestId !== undefined) delete values.clientRequestId;
+  if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+  const [row] = await db.update(otherVisasTable).set(values as any).where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, req.session.officeId!))).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(toVisa(row));
+});
+
+router.delete("/visas/:id", async (req, res): Promise<void> => {
+  const params = DeleteVisaParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.delete(otherVisasTable).where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, req.session.officeId!))).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ message: "Deleted" });
+});
+
+export default router;

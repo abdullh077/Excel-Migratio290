@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AppUser {
-  id: number;
-  username: string;
-  role: string;
-  createdAt: string;
+export interface StatementMonth {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
 }

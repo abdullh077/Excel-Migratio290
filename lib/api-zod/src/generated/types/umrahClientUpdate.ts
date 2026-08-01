@@ -17,6 +17,7 @@ export interface UmrahClientUpdate {
   purchasePrice?: number;
   salePrice?: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
   entryDate?: string;
 }

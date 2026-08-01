@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "نظام إدارة التأشيرات"
+version = "1.0.0"
+id = "artifacts/visa-manager"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23328
+
+[services.development]
+run = "pnpm --filter @workspace/visa-manager run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/visa-manager", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/visa-manager/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23328"
+BASE_PATH = "/"

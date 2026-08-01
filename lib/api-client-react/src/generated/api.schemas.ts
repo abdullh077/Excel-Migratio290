@@ -26,27 +26,207 @@ export interface AuthUser {
   id: number;
   username: string;
   role: string;
+  officeId?: number;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
-export interface AppUser {
+export interface Account {
   id: number;
   username: string;
   role: string;
+  /** @nullable */
+  parentUserId?: number | null;
+  /** @nullable */
+  expiresAt?: string | null;
+  /** @nullable */
+  officeName?: string | null;
   createdAt: string;
 }
 
-export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
+export type AccountInputRole = typeof AccountInputRole[keyof typeof AccountInputRole];
 
 
-export const UserInputRole = {
-  admin: 'admin',
-  user: 'user',
+export const AccountInputRole = {
+  owner: 'owner',
+  sub: 'sub',
 } as const;
 
-export interface UserInput {
+export interface AccountInput {
   username: string;
   password: string;
-  role: UserInputRole;
+  role: AccountInputRole;
+  parentUserId?: number;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export interface AccountExpiryInput {
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export interface AccountPasswordInput {
+  password: string;
+}
+
+export interface AccountUsernameInput {
+  username: string;
+}
+
+export interface AgentAccount {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  totalSales: number;
+  paidFrom: number;
+  paidTo: number;
+  balance: number;
+  txCount: number;
+  createdAt: string;
+}
+
+export interface AgentInput {
+  name: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface AgentPayment {
+  id: number;
+  agentId: number;
+  amount: number;
+  direction: string;
+  paidAt: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  voucherId?: number | null;
+  createdAt: string;
+}
+
+export type AgentPaymentInputDirection = typeof AgentPaymentInputDirection[keyof typeof AgentPaymentInputDirection];
+
+
+export const AgentPaymentInputDirection = {
+  from_agent: 'from_agent',
+  to_agent: 'to_agent',
+} as const;
+
+export interface AgentPaymentInput {
+  amount: number;
+  direction: AgentPaymentInputDirection;
+  paidAt?: string;
+  notes?: string;
+  createVoucher?: boolean;
+}
+
+export interface StatementTx {
+  id: number;
+  clientName: string;
+  type: string;
+  issueDate: string;
+  salePrice: number;
+  /** @nullable */
+  receivedFromClient?: number | null;
+  createdAt: string;
+}
+
+export interface Voucher {
+  id: number;
+  kind: string;
+  partyType: string;
+  partyName: string;
+  amount: number;
+  /** @nullable */
+  description?: string | null;
+  voucherDate: string;
+  /** @nullable */
+  agentPaymentId?: number | null;
+  createdAt: string;
+}
+
+export interface AgentDetails {
+  agent: AgentAccount;
+  transactions: StatementTx[];
+  payments: AgentPayment[];
+  vouchers: Voucher[];
+}
+
+export interface ClientAccount {
+  clientName: string;
+  /** @nullable */
+  phone?: string | null;
+  totalSales: number;
+  totalReceived: number;
+  balance: number;
+  txCount: number;
+}
+
+export interface ClientDetails {
+  account: ClientAccount;
+  transactions: StatementTx[];
+  vouchers: Voucher[];
+}
+
+export interface LedgerEntry {
+  id: number;
+  type: string;
+  amount: number;
+  description: string;
+  entryDate: string;
+  createdAt: string;
+}
+
+export type LedgerEntryInputType = typeof LedgerEntryInputType[keyof typeof LedgerEntryInputType];
+
+
+export const LedgerEntryInputType = {
+  income: 'income',
+  expense: 'expense',
+} as const;
+
+export interface LedgerEntryInput {
+  type: LedgerEntryInputType;
+  amount: number;
+  description: string;
+  entryDate?: string;
+}
+
+export interface StatementMonth {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+export type VoucherInputKind = typeof VoucherInputKind[keyof typeof VoucherInputKind];
+
+
+export const VoucherInputKind = {
+  receipt: 'receipt',
+  payment: 'payment',
+} as const;
+
+export type VoucherInputPartyType = typeof VoucherInputPartyType[keyof typeof VoucherInputPartyType];
+
+
+export const VoucherInputPartyType = {
+  agent: 'agent',
+  client: 'client',
+  other: 'other',
+} as const;
+
+export interface VoucherInput {
+  kind: VoucherInputKind;
+  partyType: VoucherInputPartyType;
+  partyName: string;
+  amount: number;
+  description?: string;
+  voucherDate?: string;
 }
 
 export interface UmrahClient {
@@ -63,6 +243,8 @@ export interface UmrahClient {
   profit: number;
   sendStatus: string;
   status: string;
+  /** @nullable */
+  transactionParty?: string | null;
   /** @nullable */
   notes?: string | null;
   /** @nullable */
@@ -81,8 +263,10 @@ export interface UmrahClientInput {
   purchasePrice: number;
   salePrice: number;
   sendStatus: string;
+  transactionParty?: string;
   notes?: string;
   entryDate?: string;
+  clientRequestId?: string;
 }
 
 export interface UmrahClientUpdate {
@@ -96,6 +280,7 @@ export interface UmrahClientUpdate {
   purchasePrice?: number;
   salePrice?: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
   entryDate?: string;
 }
@@ -119,6 +304,8 @@ export interface OtherVisa {
   profit: number;
   sendStatus?: string;
   /** @nullable */
+  transactionParty?: string | null;
+  /** @nullable */
   notes?: string | null;
   createdAt: string;
 }
@@ -137,7 +324,9 @@ export interface OtherVisaInput {
   receivedFromClient: number;
   transferredToAgent: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
+  clientRequestId?: string;
 }
 
 export interface OtherVisaUpdate {
@@ -154,6 +343,7 @@ export interface OtherVisaUpdate {
   receivedFromClient?: number;
   transferredToAgent?: number;
   sendStatus?: string;
+  transactionParty?: string;
   notes?: string;
 }
 
@@ -227,6 +417,12 @@ export interface OfficeSettings {
   officePhone: string;
   officePhone2: string;
   officeAddress: string;
+  /** @nullable */
+  officeLogo?: string | null;
+  /** @nullable */
+  stampImage?: string | null;
+  /** @nullable */
+  signatureImage?: string | null;
   whatsappUmrahTemplate: string;
   whatsappOtherTemplate: string;
   configured: boolean;
@@ -237,10 +433,25 @@ export interface OfficeSettingsUpdate {
   officePhone?: string;
   officePhone2?: string;
   officeAddress?: string;
+  /** @nullable */
+  officeLogo?: string | null;
+  /** @nullable */
+  stampImage?: string | null;
+  /** @nullable */
+  signatureImage?: string | null;
   whatsappUmrahTemplate?: string;
   whatsappOtherTemplate?: string;
   configured?: boolean;
 }
+
+export type GetClientDetailsParams = {
+name: string;
+};
+
+export type ListVouchersParams = {
+kind?: string;
+party?: string;
+};
 
 export type ListUmrahClientsParams = {
 search?: string;

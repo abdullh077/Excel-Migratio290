@@ -5,10 +5,7 @@
  * Visa Management System API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserInputRole } from './userInputRole';
 
-export interface UserInput {
-  username: string;
+export interface AccountPasswordInput {
   password: string;
-  role: UserInputRole;
 }
