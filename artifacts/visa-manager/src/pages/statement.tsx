@@ -1245,8 +1245,8 @@ export default function StatementPage() {
                   {/* Signature & stamp */}
                   <div className="flex justify-between pt-4 text-sm">
                     <div className="text-center">
-                      <p className="text-[hsl(220,40%,18%)] font-medium">توقيع الوكيل</p>
-                      <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
+                      <div className="h-16 mb-1" />
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع الوكيل</p>
                     </div>
                     <div className="text-center">
                       <div className="flex items-end justify-center gap-2 h-16 mb-1">
@@ -1443,8 +1443,8 @@ export default function StatementPage() {
                   {/* Signature & stamp */}
                   <div className="flex justify-between pt-4 text-sm">
                     <div className="text-center">
-                      <p className="text-[hsl(220,40%,18%)] font-medium">توقيع العميل</p>
-                      <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
+                      <div className="h-16 mb-1" />
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع العميل</p>
                     </div>
                     <div className="text-center">
                       <div className="flex items-end justify-center gap-2 h-16 mb-1">
@@ -1634,8 +1634,8 @@ export default function StatementPage() {
 
                 <div className="flex justify-between pt-6 text-sm">
                   <div className="text-center">
-                    <p className="text-[hsl(220,40%,18%)] font-medium">توقيع المستلم</p>
-                    <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
+                    <div className="h-16 mb-1" />
+                    <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المستلم</p>
                   </div>
                   <div className="text-center">
                     <div className="flex items-end justify-center gap-2 h-16 mb-1">

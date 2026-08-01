@@ -2,28 +2,15 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { db, officeSettingsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 import { UpdateOfficeSettingsBody } from "@workspace/api-zod";
 
 const router = Router();
 
-// PUBLIC — used on the login page before any session exists.
-// Mounted separately in routes/index.ts BEFORE any auth-guarded routers.
-export const publicSettingsRouter = Router();
-
-// Returns the branding (office name + logo) of the most recently updated office.
-publicSettingsRouter.get("/settings/branding", async (_req, res): Promise<void> => {
-  const [row] = await db
-    .select({ officeName: officeSettingsTable.officeName, officeLogo: officeSettingsTable.officeLogo })
-    .from(officeSettingsTable)
-    .orderBy(desc(officeSettingsTable.updatedAt))
-    .limit(1);
-
-  res.json({ officeName: row?.officeName ?? "", officeLogo: row?.officeLogo ?? "" });
-});
-
 // Everything below requires an authenticated office session.
+// NOTE: the old public pre-login branding endpoint was removed — it leaked the
+// most-recently-updated office's logo to anyone before login.
 router.use("/settings", requireOffice);
 
 const BrandingBody = z.object({

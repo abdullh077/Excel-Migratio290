@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,35 +27,10 @@ type LoginValues = z.infer<typeof loginSchema>;
 const WHATSAPP_HREF =
   "https://wa.me/967781332742?text=%D8%A3%D8%B1%D8%BA%D8%A8%20%D8%A8%D8%AA%D9%81%D8%B9%D9%8A%D9%84%20%D8%A3%D9%88%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20%D8%A7%D8%B4%D8%AA%D8%B1%D8%A7%D9%83%20%D9%81%D9%8A%20%D9%86%D8%B8%D8%A7%D9%85%20%D8%B9%D8%A8%D9%88%D8%B1";
 
-async function fetchBranding(): Promise<{ officeName: string; officeLogo: string }> {
-  try {
-    const res = await fetch("/api/settings/branding", { credentials: "include" });
-    if (!res.ok) return { officeName: "", officeLogo: "" };
-    const data = await res.json();
-    return {
-      officeName: data?.officeName ?? "",
-      officeLogo: data?.officeLogo ?? "",
-    };
-  } catch {
-    return { officeName: "", officeLogo: "" };
-  }
-}
-
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [officeLogo, setOfficeLogo] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    fetchBranding().then((b) => {
-      if (active) setOfficeLogo(b.officeLogo);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -111,14 +85,7 @@ export default function LoginPage() {
           }}
         />
         <div className="relative z-10 flex flex-col items-center text-center max-w-md">
-          {officeLogo ? (
-            <img
-              src={officeLogo}
-              alt="شعار المكتب"
-              className="h-28 w-28 rounded-2xl object-contain bg-white/5 p-2 mb-8"
-            />
-          ) : (
-            <svg
+          <svg
               width="112"
               height="112"
               viewBox="0 0 112 112"
@@ -147,7 +114,6 @@ export default function LoginPage() {
                 strokeLinejoin="round"
               />
             </svg>
-          )}
           <h1 className="text-5xl font-extrabold tracking-widest text-[hsl(40,66%,60%)]">
             OBOOR
           </h1>
