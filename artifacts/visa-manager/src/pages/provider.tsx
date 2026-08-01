@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup, RefreshCw, Building2 } from "lucide-react";
+import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup, RefreshCw, Building2, History, Upload } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -153,6 +153,43 @@ export default function ProviderPage() {
     },
     onError: () => toast({ title: "تعذّر أخذ النسخة", variant: "destructive" }),
   });
+
+  // Restore
+  const [restoreTarget, setRestoreTarget] = useState<{ id: number; createdAt?: string } | null>(null);
+  const [uploadPayload, setUploadPayload] = useState<any | null>(null);
+  const [uploadName, setUploadName] = useState("");
+  const restoreMut = useMutation({
+    mutationFn: () =>
+      restoreTarget
+        ? postJson(`/api/provider/backups/${restoreTarget.id}/restore`, {})
+        : postJson("/api/provider/restore-upload", { payload: uploadPayload }),
+    onSuccess: () => {
+      qc.invalidateQueries();
+      setRestoreTarget(null);
+      setUploadPayload(null);
+      setUploadName("");
+      toast({ title: "تمت استعادة البيانات بنجاح", description: "أُخذت نسخة أمان من البيانات السابقة قبل الاستعادة." });
+    },
+    onError: () => toast({ title: "تعذّرت الاستعادة", description: "لم يتم تغيير أي بيانات.", variant: "destructive" }),
+  });
+
+  function onUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (parsed?.version !== 2 || !parsed?.data) throw new Error("bad");
+        setUploadPayload(parsed);
+        setUploadName(file.name);
+      } catch {
+        toast({ title: "ملف غير صالح", description: "الملف ليس نسخة احتياطية صحيحة.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  }
 
   function isExpired(a: any) {
     return a.expiresAt && new Date(a.expiresAt) < new Date();
@@ -315,9 +352,18 @@ export default function ProviderPage() {
                             {b.size ? `${(b.size / 1024).toFixed(0)} KB` : "—"}
                           </td>
                           <td className="px-3 py-2 text-left">
-                            <a href={`/api/provider/backups/${b.id}`} download className="text-primary inline-flex items-center gap-1 text-xs">
-                              <Download className="w-3.5 h-3.5" />تنزيل إلى الجهاز
-                            </a>
+                            <div className="inline-flex items-center gap-3">
+                              <a href={`/api/provider/backups/${b.id}`} download className="text-primary inline-flex items-center gap-1 text-xs">
+                                <Download className="w-3.5 h-3.5" />تنزيل إلى الجهاز
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setRestoreTarget({ id: b.id, createdAt: b.createdAt })}
+                                className="text-destructive inline-flex items-center gap-1 text-xs"
+                              >
+                                <History className="w-3.5 h-3.5" />استعادة
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -325,9 +371,59 @@ export default function ProviderPage() {
                   </table>
                 </div>
               )}
+
+              <div className="pt-2 border-t">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-primary" /> استعادة من ملف نسخة احتياطية
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  اختر ملف نسخة احتياطية (.json) سبق تنزيله من هنا لاستعادة البيانات منه.
+                </p>
+                <label className="mt-2 inline-flex items-center gap-2 text-xs text-primary cursor-pointer border rounded-md px-3 py-1.5 hover:bg-muted/50">
+                  <Upload className="w-3.5 h-3.5" /> اختيار ملف...
+                  <input type="file" accept=".json,application/json" className="hidden" onChange={onUploadFile} />
+                </label>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Restore confirmation */}
+        <AlertDialog
+          open={!!restoreTarget || !!uploadPayload}
+          onOpenChange={(open) => { if (!open) { setRestoreTarget(null); setUploadPayload(null); setUploadName(""); } }}
+        >
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle>استعادة البيانات من نسخة احتياطية؟</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>
+                    {restoreTarget?.createdAt
+                      ? <>سيتم استبدال جميع البيانات الحالية ببيانات النسخة المؤرَّخة في{" "}
+                          <span className="font-medium">{new Date(restoreTarget.createdAt).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>.
+                        </>
+                      : <>سيتم استبدال جميع البيانات الحالية ببيانات الملف <span className="font-medium" dir="ltr">{uploadName}</span>.</>}
+                  </p>
+                  <p className="text-destructive font-medium">
+                    تحذير: جميع البيانات الحالية (العملاء، التأشيرات، الوكلاء، السندات، الإعدادات، الحسابات) ستُستبدل ولا يمكن التراجع مباشرة.
+                  </p>
+                  <p>ستُؤخذ نسخة أمان من البيانات الحالية تلقائياً قبل الاستعادة.</p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={restoreMut.isPending}
+                onClick={(e) => { e.preventDefault(); restoreMut.mutate(); }}
+              >
+                {restoreMut.isPending ? "جارٍ الاستعادة..." : "نعم، استعادة البيانات"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Create Owner Dialog */}
         <Dialog open={ownerOpen} onOpenChange={setOwnerOpen}>

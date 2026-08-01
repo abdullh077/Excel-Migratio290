@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, usersTable, officeSettingsTable, backupsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireProvider } from "../lib/auth.js";
-import { createBackup } from "../lib/backup.js";
+import { createBackup, restoreFromBackupPayload } from "../lib/backup.js";
 import { addMonthsClamped } from "../lib/dates.js";
 import {
   CreateAccountBody,
@@ -262,6 +262,37 @@ router.get("/provider/backups/:id", async (req, res): Promise<void> => {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", `attachment; filename="${row.name}"`);
   res.send(JSON.stringify(row.data, null, 2));
+});
+
+// Restore a stored backup. Takes a safety backup first, then replaces all data
+// atomically. Provider-only (router guard) + strong client-side confirmation.
+router.post("/provider/backups/:id/restore", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(backupsTable).where(eq(backupsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+  const safety = await createBackup("manual"); // safety snapshot of the current state
+  try {
+    await restoreFromBackupPayload(row.data, (req.session as any).userId);
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.message ?? "Restore failed" });
+    return;
+  }
+  res.json({ message: "Restored", from: row.name, safetyBackupId: safety.id });
+});
+
+// Restore from an uploaded backup .json file (sent as parsed JSON body).
+router.post("/provider/restore-upload", async (req, res): Promise<void> => {
+  const payload = req.body?.payload ?? req.body;
+  const safety = await createBackup("manual");
+  try {
+    await restoreFromBackupPayload(payload, (req.session as any).userId);
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.message ?? "Restore failed" });
+    return;
+  }
+  res.json({ message: "Restored", safetyBackupId: safety.id });
 });
 
 export default router;
