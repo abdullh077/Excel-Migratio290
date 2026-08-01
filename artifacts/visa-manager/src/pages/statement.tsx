@@ -142,7 +142,7 @@ function BalanceBadge({ balance }: { balance: number }) {
 }
 
 // Export ledger statement to an RTL xlsx file (same columns as LedgerTable, with opening row and totals)
-function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: string) {
+function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: string, entity: "agent" | "client" = "agent") {
   const opening = Number(ledger?.opening) || 0;
   let run = opening;
   const balLabel = (v: number) => (v > 0 ? `${Math.abs(v)} (عليه)` : v < 0 ? `${Math.abs(v)} (له)` : "0 (مسدَّد)");
@@ -171,7 +171,7 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
     "",
     "العملة: ريال سعودي",
   ]);
-  const title = `كشف حساب تفصيلي للوكيل: ${agentName}`;
+  const title = `كشف حساب تفصيلي ${entity === "client" ? "للعميل" : "للوكيل"}: ${agentName}`;
   const period =
     from || to
       ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
@@ -1369,13 +1369,23 @@ export default function StatementPage() {
                     <p className="font-bold flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
                     </p>
-                    <Button
-                      size="sm"
-                      className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
-                      onClick={() => setPrintClientStatement(true)}
-                    >
-                      <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-white/10 border-[hsl(43,65%,52%)] text-white hover:bg-white/20 hover:text-white font-bold"
+                        onClick={() => clientDetail?.ledger && exportLedgerXlsx(clientDetail.ledger, clientDetail.account?.clientName ?? "", clientStmtFrom, clientStmtTo, "client")}
+                      >
+                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                        onClick={() => setPrintClientStatement(true)}
+                      >
+                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                      </Button>
+                    </div>
                   </div>
                   <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
                     <div>
@@ -1454,6 +1464,12 @@ export default function StatementPage() {
             <DialogFooter className="gap-2 no-print">
               <Button variant="outline" onClick={() => setPrintClientStatement(false)}>
                 إغلاق
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => clientDetail?.ledger && exportLedgerXlsx(clientDetail.ledger, clientDetail.account?.clientName ?? "", clientStmtFrom, clientStmtTo, "client")}
+              >
+                <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
               <Button onClick={() => window.print()}>
                 <Printer className="w-4 h-4 ml-1.5" /> طباعة
