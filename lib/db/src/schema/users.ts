@@ -13,6 +13,9 @@ export const usersTable = pgTable("users", {
   // Account validity: NULL = unlimited (provider/owner). A past date blocks login.
   // Only meaningful on OWNER accounts; subs inherit their owner's window.
   expiresAt: timestamp("expires_at"),
+  // Provider-only reference label ("this account belongs to office X").
+  // Separate from office_settings.officeName, which the office itself manages.
+  providerLabel: text("provider_label"),
   // Brute-force protection: consecutive failed logins + temporary lockout.
   failedAttempts: integer("failed_attempts").default(0).notNull(),
   lockedUntil: timestamp("locked_until"),

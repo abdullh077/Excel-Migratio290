@@ -36,7 +36,8 @@ router.get("/provider/accounts", async (req, res): Promise<void> => {
       role: u.role,
       parentUserId: u.parentUserId,
       expiresAt: u.expiresAt ? u.expiresAt.toISOString() : null,
-      officeName: settingsMap.get(u.parentUserId ?? u.id) ?? null,
+      // Provider reference label takes priority; fall back to the office's own configured name.
+      officeName: u.providerLabel ?? settingsMap.get(u.parentUserId ?? u.id) ?? null,
       createdAt: u.createdAt.toISOString(),
     }))
   );
@@ -113,12 +114,13 @@ const CreateOwnerBody = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   expiresAt: z.string().nullish(),
+  officeName: z.string().trim().nullish(),
 });
 
 router.post("/provider/owners", async (req, res): Promise<void> => {
   const parsed = CreateOwnerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const { username, password, expiresAt } = parsed.data;
+  const { username, password, expiresAt, officeName } = parsed.data;
   const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await db.insert(usersTable).values({
     username,
@@ -126,12 +128,73 @@ router.post("/provider/owners", async (req, res): Promise<void> => {
     role: "owner",
     parentUserId: null,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
+    providerLabel: officeName ?? null,
   }).returning();
+
+  if (officeName) {
+    // Seed the new office's branding with the same name; never overwrite an existing row.
+    await db.insert(officeSettingsTable)
+      .values({ userId: user.id, officeName, updatedAt: new Date() })
+      .onConflictDoNothing();
+  }
+
   res.status(201).json({
     id: user.id, username: user.username, role: user.role,
     parentUserId: user.parentUserId, expiresAt: user.expiresAt ? user.expiresAt.toISOString() : null,
-    officeName: null, createdAt: user.createdAt.toISOString(),
+    officeName: officeName ?? null, createdAt: user.createdAt.toISOString(),
   });
+});
+
+// Provider reference label: which office does this account belong to.
+// Stored on the users row — deliberately does NOT touch office_settings,
+// so the office's own configured branding name is never overwritten.
+router.patch("/provider/accounts/:id/office-name", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = z.object({ officeName: z.string().trim().min(1) }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const [user] = await db.update(usersTable)
+    .set({ providerLabel: body.data.officeName })
+    .where(eq(usersTable.id, id)).returning();
+  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ message: "Updated", officeName: body.data.officeName });
+});
+
+// Calendar-safe month addition: clamps to the last day of the target month
+// (e.g. Jan 31 + 1 month = Feb 28/29, not Mar 2/3).
+function addMonthsClamped(date: Date, months: number): Date {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
+// Subscription renewal: extend expiry by N months from max(now, current expiry).
+router.post("/provider/accounts/:id/renew", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = z.object({ months: z.number().int().min(1).max(60) }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  // Renewal always applies to the owner account (subs inherit it).
+  const ownerId = user.parentUserId ?? user.id;
+  const [owner] = await db.select().from(usersTable).where(eq(usersTable.id, ownerId));
+  if (!owner) { res.status(404).json({ error: "Owner not found" }); return; }
+
+  const now = new Date();
+  const base = addMonthsClamped(owner.expiresAt && owner.expiresAt > now ? new Date(owner.expiresAt) : now, body.data.months);
+
+  await db.update(usersTable).set({ expiresAt: base }).where(eq(usersTable.id, ownerId));
+  // Keep sub accounts' reference copy in sync.
+  await db.update(usersTable).set({ expiresAt: base }).where(eq(usersTable.parentUserId, ownerId));
+
+  res.json({ id: ownerId, expiresAt: base.toISOString() });
 });
 
 const CreateSubBody = z.object({

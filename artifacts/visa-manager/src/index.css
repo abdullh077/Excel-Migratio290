@@ -213,6 +213,11 @@
     @apply border-border;
   }
 
+  html {
+    /* Slightly larger base size — scales all rem-based text & icons app-wide */
+    font-size: 17px;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }

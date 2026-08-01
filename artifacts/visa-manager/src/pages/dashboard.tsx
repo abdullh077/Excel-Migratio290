@@ -122,8 +122,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
               </div>
-              <div className="rounded-lg bg-gradient-to-br from-primary to-accent p-2.5 text-white">
-                <Users className="w-5 h-5" />
+              <div className="rounded-xl bg-gradient-to-br from-primary via-primary to-accent p-3.5 text-white shadow-md ring-2 ring-accent/30">
+                <Users className="w-7 h-7" />
               </div>
             </div>
           </div>
@@ -137,8 +137,8 @@ export default function DashboardPage() {
                 <p className="mt-2 text-3xl font-bold" dir="ltr">{om(stats.visasTotal)}</p>
                 <p className="mt-3 text-xs text-muted-foreground">التأشيرات غير العمرة</p>
               </div>
-              <div className="rounded-lg bg-gradient-to-br from-accent to-primary p-2.5 text-white">
-                <FileText className="w-5 h-5" />
+              <div className="rounded-xl bg-gradient-to-br from-accent via-accent to-primary p-3.5 text-white shadow-md ring-2 ring-primary/20">
+                <FileText className="w-7 h-7" />
               </div>
             </div>
           </div>
@@ -154,8 +154,8 @@ export default function DashboardPage() {
                   العمرة: {om(stats.umrahTotalProfit)} | أخرى: {om(stats.visasTotalProfit)}
                 </p>
               </div>
-              <div className="rounded-lg bg-gradient-to-br from-green-500 to-emerald-400 p-2.5 text-white">
-                <Wallet className="w-5 h-5" />
+              <div className="rounded-xl bg-gradient-to-br from-primary to-accent p-3.5 text-white shadow-md ring-2 ring-accent/30">
+                <Wallet className="w-7 h-7" />
               </div>
             </div>
           </div>
@@ -171,8 +171,8 @@ export default function DashboardPage() {
                   بواقي على الوكلاء: {om(stats.visasTotalAgentBalance)}
                 </p>
               </div>
-              <div className="rounded-lg bg-gradient-to-br from-amber-500 to-orange-400 p-2.5 text-white">
-                <AlertTriangle className="w-5 h-5" />
+              <div className="rounded-xl bg-gradient-to-br from-accent to-primary p-3.5 text-white shadow-md ring-2 ring-primary/20">
+                <AlertTriangle className="w-7 h-7" />
               </div>
             </div>
           </div>

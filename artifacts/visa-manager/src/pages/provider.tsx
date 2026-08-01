@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup } from "lucide-react";
+import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup, RefreshCw, Building2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -64,10 +64,13 @@ export default function ProviderPage() {
   const [renameId, setRenameId] = useState<number | null>(null);
   const [pwdId, setPwdId] = useState<number | null>(null);
   const [expiryId, setExpiryId] = useState<number | null>(null);
+  const [renewId, setRenewId] = useState<number | null>(null);
+  const [officeNameId, setOfficeNameId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // form state
-  const [ownerForm, setOwnerForm] = useState({ username: "", password: "", customDate: false, expiresAt: "" });
+  const [ownerForm, setOwnerForm] = useState({ username: "", password: "", officeName: "", customDate: false, expiresAt: "" });
+  const [officeNameVal, setOfficeNameVal] = useState("");
   const [subForm, setSubForm] = useState({ parentUserId: "", username: "", password: "", customDate: false });
   const [renameVal, setRenameVal] = useState("");
   const [pwdVal, setPwdVal] = useState("");
@@ -79,14 +82,28 @@ export default function ProviderPage() {
     mutationFn: () => postJson("/api/provider/owners", {
       username: ownerForm.username,
       password: ownerForm.password,
+      officeName: ownerForm.officeName || null,
       expiresAt: ownerForm.customDate && ownerForm.expiresAt ? ownerForm.expiresAt : null,
     }),
     onSuccess: () => {
       invalidate();
       setOwnerOpen(false);
-      setOwnerForm({ username: "", password: "", customDate: false, expiresAt: "" });
+      setOwnerForm({ username: "", password: "", officeName: "", customDate: false, expiresAt: "" });
       toast({ title: "تم إنشاء حساب المكتب" });
     },
+    onError: () => toast({ title: "تعذّر إنشاء الحساب", variant: "destructive" }),
+  });
+
+  const renewMut = useMutation({
+    mutationFn: (months: number) => postJson(`/api/provider/accounts/${renewId}/renew`, { months }),
+    onSuccess: () => { invalidate(); setRenewId(null); toast({ title: "تم تجديد الاشتراك بنجاح" }); },
+    onError: () => toast({ title: "تعذّر التجديد", variant: "destructive" }),
+  });
+
+  const officeNameMut = useMutation({
+    mutationFn: () => patchJson(`/api/provider/accounts/${officeNameId}/office-name`, { officeName: officeNameVal }),
+    onSuccess: () => { invalidate(); setOfficeNameId(null); setOfficeNameVal(""); toast({ title: "تم حفظ اسم المكتب" }); },
+    onError: () => toast({ title: "تعذّر الحفظ", variant: "destructive" }),
   });
 
   const createSub = useMutation({
@@ -184,9 +201,17 @@ export default function ProviderPage() {
                         </td>
                         <td className="py-2">
                           <div className="flex items-center justify-center gap-1">
+                            {isExpired(a) ? (
+                              <Button size="sm" className="h-7 px-2 text-xs bg-accent text-accent-foreground hover:bg-accent/90" title="تجديد الاشتراك" onClick={() => setRenewId(a.id)}>
+                                <RefreshCw className="w-3.5 h-3.5 ml-1" />تجديد
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="sm" className="h-7 px-2" title="تجديد الاشتراك" onClick={() => setRenewId(a.id)}><RefreshCw className="w-3.5 h-3.5" /></Button>
+                            )}
+                            <Button variant="ghost" size="sm" className="h-7 px-2" title="اسم المكتب (مرجع)" onClick={() => { setOfficeNameId(a.id); setOfficeNameVal(a.officeName ?? ""); }}><Building2 className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير الاسم" onClick={() => { setRenameId(a.id); setRenameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير كلمة المرور" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تاريخ الانتهاء" onClick={() => { setExpiryId(a.id); setExpiryVal(a.expiresAt ? String(a.expiresAt).slice(0, 10) : ""); }}><Calendar className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تاريخ مخصص" onClick={() => { setExpiryId(a.id); setExpiryVal(a.expiresAt ? String(a.expiresAt).slice(0, 10) : ""); }}><Calendar className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" title="حذف المكتب" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </td>
@@ -289,6 +314,11 @@ export default function ProviderPage() {
                 <Label>كلمة المرور</Label>
                 <Input type="text" value={ownerForm.password} onChange={(e) => setOwnerForm((f) => ({ ...f, password: e.target.value }))} dir="ltr" className="text-left" />
               </div>
+              <div className="space-y-1.5">
+                <Label>اسم المكتب (مرجع لك)</Label>
+                <Input value={ownerForm.officeName} onChange={(e) => setOwnerForm((f) => ({ ...f, officeName: e.target.value }))} placeholder="مثال: مكتب النور للعمرة — صنعاء" />
+                <p className="text-xs text-muted-foreground">يظهر في جدول الحسابات لتعرف هذا الحساب يخص أي مكتب.</p>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={ownerForm.customDate} onChange={(e) => setOwnerForm((f) => ({ ...f, customDate: e.target.checked }))} />
                 تاريخ مخصص
@@ -370,6 +400,43 @@ export default function ProviderPage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setPwdId(null)}>إلغاء</Button>
               <Button onClick={() => pwdMut.mutate()} disabled={pwdMut.isPending || !pwdVal}>حفظ</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Renew Dialog */}
+        <Dialog open={renewId != null} onOpenChange={(o) => { if (!o) setRenewId(null); }}>
+          <DialogContent dir="rtl">
+            <DialogHeader>
+              <DialogTitle>تجديد الاشتراك</DialogTitle>
+              <DialogDescription>
+                اختر مدة التجديد وتُضاف مباشرة إلى نهاية الاشتراك الحالي (أو من اليوم إذا كان منتهياً).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 py-2">
+              {[{ m: 1, t: "شهر واحد" }, { m: 3, t: "3 أشهر" }, { m: 6, t: "6 أشهر" }, { m: 12, t: "سنة كاملة" }].map(({ m, t }) => (
+                <Button key={m} variant="outline" className="h-14 text-base border-accent/50 hover:bg-accent/10 hover:border-accent" disabled={renewMut.isPending} onClick={() => renewMut.mutate(m)}>
+                  <RefreshCw className="w-4 h-4 ml-2 text-accent" />{t}
+                </Button>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenewId(null)}>إلغاء</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Office Name Dialog */}
+        <Dialog open={officeNameId != null} onOpenChange={(o) => { if (!o) setOfficeNameId(null); }}>
+          <DialogContent dir="rtl">
+            <DialogHeader><DialogTitle>اسم المكتب (مرجع)</DialogTitle></DialogHeader>
+            <div className="space-y-2 py-2">
+              <Label>اسم المكتب</Label>
+              <Input value={officeNameVal} onChange={(e) => setOfficeNameVal(e.target.value)} placeholder="مثال: مكتب النور للعمرة — صنعاء" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOfficeNameId(null)}>إلغاء</Button>
+              <Button onClick={() => officeNameMut.mutate()} disabled={officeNameMut.isPending || !officeNameVal.trim()}>حفظ</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

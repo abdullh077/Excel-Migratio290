@@ -6,3 +6,4 @@ export * from "./license";
 export * from "./office_settings";
 export * from "./agents";
 export * from "./vouchers";
+export * from "./client_accounts";

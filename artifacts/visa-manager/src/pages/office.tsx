@@ -262,12 +262,16 @@ export default function OfficePage() {
             <div className="space-y-1.5">
               <Label>قالب رسالة واتساب — العمرة</Label>
               <Textarea className="min-h-[100px] resize-y" value={form.whatsappUmrahTemplate} onChange={(e) => set("whatsappUmrahTemplate")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{"{office} · {name} · {days}"}</p>
+              <p className="text-xs text-muted-foreground">
+                تُستبدل تلقائياً: <b>{"{office}"}</b> اسم المكتب · <b>{"{name}"}</b> اسم المعتمر · <b>{"{days}"}</b> الأيام المتبقية
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>قالب رسالة واتساب — تأشيرات أخرى</Label>
               <Textarea className="min-h-[100px] resize-y" value={form.whatsappOtherTemplate} onChange={(e) => set("whatsappOtherTemplate")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{"{office} · {name} · {visaType}"}</p>
+              <p className="text-xs text-muted-foreground">
+                تُستبدل تلقائياً: <b>{"{office}"}</b> اسم المكتب · <b>{"{name}"}</b> اسم العميل · <b>{"{visaType}"}</b> نوع التأشيرة
+              </p>
             </div>
           </Card>
         </div>

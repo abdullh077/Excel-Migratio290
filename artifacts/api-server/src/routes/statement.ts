@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { db, agentsTable, agentPaymentsTable, ledgerEntriesTable, umrahClientsTable, otherVisasTable, vouchersTable } from "@workspace/db";
+import { z } from "zod";
+import { db, agentsTable, agentPaymentsTable, ledgerEntriesTable, umrahClientsTable, otherVisasTable, vouchersTable, clientAccountsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { requireOffice, requireOwner } from "../lib/auth.js";
 import {
@@ -211,8 +212,42 @@ router.delete("/statement/payments/:id", async (req, res): Promise<void> => {
   res.json({ message: "Deleted" });
 });
 
+router.post("/statement/clients", async (req, res): Promise<void> => {
+  const officeId = req.session.officeId!;
+  const body = z.object({
+    clientName: z.string().trim().min(1),
+    phone: z.string().trim().nullish(),
+    notes: z.string().trim().nullish(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const [existing] = await db.select().from(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, body.data.clientName)));
+  if (existing) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
+
+  const [row] = await db.insert(clientAccountsTable).values({
+    userId: officeId,
+    clientName: body.data.clientName,
+    phone: body.data.phone ?? null,
+    notes: body.data.notes ?? null,
+  }).returning();
+  res.status(201).json({ id: row.id, clientName: row.clientName, phone: row.phone, notes: row.notes });
+});
+
+router.delete("/statement/clients/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.delete(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.id, id), eq(clientAccountsTable.userId, req.session.officeId!))).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ message: "Deleted" });
+});
+
 router.get("/statement/clients", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
+
+  const manualRows = await db.select().from(clientAccountsTable)
+    .where(eq(clientAccountsTable.userId, officeId));
 
   const visaRows = await db
     .select({
@@ -227,7 +262,25 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
     .where(eq(otherVisasTable.userId, officeId))
     .groupBy(otherVisasTable.clientName, otherVisasTable.phone);
 
-  res.json(visaRows.map((r) => ({ clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount })));
+  const byName = new Map<string, any>();
+  for (const r of visaRows) {
+    const key = r.clientName;
+    const prev = byName.get(key);
+    if (prev) {
+      prev.totalSales += r.totalSales; prev.totalReceived += r.totalReceived;
+      prev.balance += r.balance; prev.txCount += r.txCount;
+      prev.phone = prev.phone || r.phone;
+    } else {
+      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, manualId: null });
+    }
+  }
+  for (const m of manualRows) {
+    const prev = byName.get(m.clientName);
+    if (prev) { prev.manualId = m.id; prev.phone = prev.phone || m.phone; }
+    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: 0, txCount: 0, manualId: m.id });
+  }
+
+  res.json([...byName.values()].sort((a, b) => a.clientName.localeCompare(b.clientName, "ar")));
 });
 
 router.get("/statement/clients/details", async (req, res): Promise<void> => {

@@ -170,6 +170,9 @@ export default function StatementPage() {
 
   // clients tab
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
+  const [clientDialog, setClientDialog] = useState(false);
+  const [clientNameField, setClientNameField] = useState("");
+  const [clientPhoneField, setClientPhoneField] = useState("");
 
   // vouchers tab
   const [voucherDialog, setVoucherDialog] = useState(false);
@@ -207,6 +210,24 @@ export default function StatementPage() {
 
   const onError = (e: any) =>
     toast({ variant: "destructive", title: "خطأ", description: e?.message || "حدث خطأ" });
+
+  const addClient = useMutation({
+    mutationFn: () =>
+      fetch("/api/statement/clients", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientName: clientNameField.trim(), phone: clientPhoneField.trim() || null }),
+      }).then(handle),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      setClientDialog(false);
+      setClientNameField("");
+      setClientPhoneField("");
+      toast({ title: "تم إضافة حساب العميل" });
+    },
+    onError,
+  });
 
   const saveAgent = useMutation({
     mutationFn: () =>
@@ -455,13 +476,18 @@ export default function StatementPage() {
 
           {/* Clients tab */}
           <TabsContent value="clients" className="space-y-4">
-            <div className="flex items-center justify-between no-print">
+            <div className="flex items-center justify-between no-print gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                كشوف حسابات العملاء تُبنى تلقائياً من التأشيرات. اضغط على أي عميل لعرض التفاصيل.
+                كشوف حسابات العملاء تُبنى تلقائياً من التأشيرات، وتقدر تضيف حساب عميل يدوياً. اضغط على أي عميل لعرض التفاصيل.
               </p>
-              <Button variant="outline" onClick={() => window.print()}>
-                <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => { setClientNameField(""); setClientPhoneField(""); setClientDialog(true); }}>
+                  <Plus className="w-4 h-4 ml-1.5" /> إضافة حساب عميل
+                </Button>
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+                </Button>
+              </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
@@ -506,6 +532,28 @@ export default function StatementPage() {
               </Table>
             </div>
           </TabsContent>
+
+            {/* Add client dialog */}
+            <Dialog open={clientDialog} onOpenChange={setClientDialog}>
+              <DialogContent dir="rtl">
+                <DialogHeader><DialogTitle>إضافة حساب عميل</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">اسم العميل</label>
+                    <Input value={clientNameField} onChange={(e) => setClientNameField(e.target.value)} placeholder="اسم العميل" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">رقم الهاتف (اختياري)</label>
+                    <Input value={clientPhoneField} onChange={(e) => setClientPhoneField(e.target.value)} dir="ltr" className="text-left" placeholder="7xxxxxxxx" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">أي تأشيرات بنفس اسم العميل ستظهر في حسابه تلقائياً.</p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setClientDialog(false)}>إلغاء</Button>
+                  <Button onClick={() => addClient.mutate()} disabled={addClient.isPending || !clientNameField.trim()}>إضافة</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
           {/* Vouchers tab */}
           <TabsContent value="vouchers" className="space-y-4">
