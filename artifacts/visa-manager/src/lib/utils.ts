@@ -34,13 +34,14 @@ export function daysRemaining(entryDate: string | null | undefined, stayDuration
 export function formatDate(s: string | null | undefined): string {
   const d = parseDate(s);
   if (!d) return s ?? "—";
-  return d.toLocaleDateString("ar-SA", { year: "numeric", month: "2-digit", day: "2-digit" });
+  // Gregorian calendar explicitly — plain ar-SA defaults to the Hijri calendar.
+  return d.toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
 export function formatDateTime(s: string | null | undefined): string {
   const d = parseDate(s);
   if (!d) return s ?? "—";
-  return d.toLocaleDateString("ar-SA", { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function today(): string {

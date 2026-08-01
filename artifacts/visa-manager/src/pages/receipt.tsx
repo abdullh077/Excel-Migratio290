@@ -166,13 +166,13 @@ export default function ReceiptPage() {
             <div className="text-center">
               <div className="flex items-end justify-center gap-2 h-24 mb-1">
                 {signatureImage && (
-                  <img src={signatureImage} alt="توقيع المستلم" className="max-h-[100px] w-auto object-contain print:max-h-[90px]" />
+                  <img src={signatureImage} alt="توقيع المكتب" className="max-h-[100px] w-auto object-contain print:max-h-[90px]" />
                 )}
                 {stampImage && (
                   <img src={stampImage} alt="ختم المكتب" className="max-h-[110px] w-auto object-contain print:max-h-[100px]" />
                 )}
               </div>
-              <div className="border-t pt-2 text-xs text-gray-600">توقيع المستلم (المكتب)</div>
+              <div className="border-t pt-2 text-xs text-gray-600">توقيع المكتب</div>
             </div>
             <div className="text-center">
               <div className="h-24 mb-1" />

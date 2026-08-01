@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 function nt(e: number | null | undefined): string {
   return e == null
     ? "0 ر.س"
-    : e.toLocaleString("ar-SA", {
+    : e.toLocaleString("ar-SA-u-ca-gregory", {
         style: "currency",
         currency: "SAR",
         minimumFractionDigits: 0,
@@ -29,7 +29,7 @@ function La(e: string | null | undefined): string {
   try {
     const t = new Date(e);
     if (isNaN(t.getTime())) return e;
-    return t.toLocaleDateString("ar-SA", { day: "2-digit", month: "long", year: "numeric" });
+    return t.toLocaleDateString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric" });
   } catch {
     return e;
   }

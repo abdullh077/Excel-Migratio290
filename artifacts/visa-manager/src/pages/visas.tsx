@@ -246,10 +246,21 @@ export default function VisasPage() {
       .replace(/\{[^}]*\}/g, "");
   }
 
-  function handleWhatsApp(v: Visa) {
-    const message = buildMessage(v);
-    const phone = String(v.phone ?? "").replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  async function handleWhatsApp(v: Visa) {
+    // Open the tab synchronously (popup blockers), then point it at the
+    // freshest record so an edited phone number is used immediately.
+    const win = window.open("", "_blank");
+    let fresh: Visa = v;
+    try {
+      fresh = await apiGet(`/api/visas/${v.id}`);
+    } catch {
+      // offline or transient error — fall back to the row we have
+    }
+    const message = buildMessage(fresh);
+    const phone = String(fresh.phone ?? "").replace(/\D/g, "");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
     patchStatus.mutate({ id: v.id, payload: { sendStatus: "تم الإرسال" } });
   }
 
@@ -428,7 +439,7 @@ export default function VisasPage() {
                 {errors.visaType && <p className="text-xs text-destructive">{errors.visaType}</p>}
               </div>
               <Field label="جهة الإصدار" required value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} error={errors.issuingAuthority} />
-              <Field label="جهة المعاملة (تظهر في السند)" placeholder="اسم جهة المعاملة" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
+              <Field label="ترحيل عبر (يظهر في السند)" placeholder="ترحيل عبر" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
               <Field label="سعر الشراء" required type="number" min={0} value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: v === "" ? "" : Number(v) }))} error={errors.purchasePrice} />
               <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
               <Field label="مستلم من العميل" required type="number" min={0} value={String(form.receivedFromClient)} onChange={(v) => setForm((f: any) => ({ ...f, receivedFromClient: v === "" ? "" : Number(v) }))} error={errors.receivedFromClient} />

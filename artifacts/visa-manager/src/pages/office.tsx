@@ -40,6 +40,12 @@ async function saveBranding(officeLogo: string | null) {
   return res.json();
 }
 
+const DEFAULT_UMRAH_TEMPLATE =
+  "السلام عليكم ورحمة الله،\nمن {office}.\nنذكّركم بقرب انتهاء مدة إقامة العمرة الخاصة بالمعتمر: {name}.\nالمتبقّي: {days} يوماً.\nنرجو التكرم بمراجعتنا لإتمام إجراءات المغادرة في الوقت المحدد.\nشاكرين لكم حسن تعاونكم.";
+
+const DEFAULT_OTHER_TEMPLATE =
+  "السلام عليكم ورحمة الله،\nعزيزنا {name}،\nمعكم {office}.\nبخصوص تأشيرتكم من نوع ({visaType})، نرجو التواصل معنا لأي استفسار أو لاستكمال الإجراءات.\nشاكرين لكم.";
+
 export default function OfficePage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -68,8 +74,9 @@ export default function OfficePage() {
         officePhone: settings.officePhone ?? "",
         officePhone2: settings.officePhone2 ?? "",
         officeAddress: settings.officeAddress ?? "",
-        whatsappUmrahTemplate: settings.whatsappUmrahTemplate ?? "",
-        whatsappOtherTemplate: settings.whatsappOtherTemplate ?? "",
+        // Prefill defaults only when never set (null/undefined) — keep an intentionally-cleared template empty.
+        whatsappUmrahTemplate: settings.whatsappUmrahTemplate ?? DEFAULT_UMRAH_TEMPLATE,
+        whatsappOtherTemplate: settings.whatsappOtherTemplate ?? DEFAULT_OTHER_TEMPLATE,
       });
       setLogo(settings.officeLogo ?? null);
       setStamp(settings.stampImage ?? null);
@@ -217,10 +224,10 @@ export default function OfficePage() {
 
           {/* Signature */}
           <Card className="p-5 space-y-3">
-            <Label>توقيع المستلم (يظهر في السند)</Label>
+            <Label>توقيع المكتب (يظهر في السند)</Label>
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 border rounded-md bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {signature ? <img src={signature} alt="توقيع المستلم" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
+                {signature ? <img src={signature} alt="توقيع المكتب" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => signatureInput.current?.click()}>

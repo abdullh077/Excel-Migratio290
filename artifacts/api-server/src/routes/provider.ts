@@ -114,20 +114,23 @@ const CreateOwnerBody = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   expiresAt: z.string().nullish(),
+  months: z.number().int().min(1).max(60).nullish(),
   officeName: z.string().trim().nullish(),
 });
 
 router.post("/provider/owners", async (req, res): Promise<void> => {
   const parsed = CreateOwnerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const { username, password, expiresAt, officeName } = parsed.data;
+  const { username, password, expiresAt, months, officeName } = parsed.data;
   const passwordHash = await bcrypt.hash(password, 10);
+  // months takes priority: calendar-safe expiry computed server-side.
+  const expiry = months ? addMonthsClamped(new Date(), months) : expiresAt ? new Date(expiresAt) : null;
   const [user] = await db.insert(usersTable).values({
     username,
     passwordHash,
     role: "owner",
     parentUserId: null,
-    expiresAt: expiresAt ? new Date(expiresAt) : null,
+    expiresAt: expiry,
     providerLabel: officeName ?? null,
   }).returning();
 

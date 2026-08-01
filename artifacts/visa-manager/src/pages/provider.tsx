@@ -63,32 +63,34 @@ export default function ProviderPage() {
   const [subOpen, setSubOpen] = useState(false);
   const [renameId, setRenameId] = useState<number | null>(null);
   const [pwdId, setPwdId] = useState<number | null>(null);
-  const [expiryId, setExpiryId] = useState<number | null>(null);
   const [renewId, setRenewId] = useState<number | null>(null);
   const [officeNameId, setOfficeNameId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // form state
-  const [ownerForm, setOwnerForm] = useState({ username: "", password: "", officeName: "", customDate: false, expiresAt: "" });
+  const [ownerForm, setOwnerForm] = useState({ username: "", password: "", officeName: "", duration: "12", expiresAt: "" });
+  const [renewCustomDate, setRenewCustomDate] = useState("");
   const [officeNameVal, setOfficeNameVal] = useState("");
   const [subForm, setSubForm] = useState({ parentUserId: "", username: "", password: "", customDate: false });
   const [renameVal, setRenameVal] = useState("");
   const [pwdVal, setPwdVal] = useState("");
-  const [expiryVal, setExpiryVal] = useState("");
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ACCOUNTS_KEY });
 
   const createOwner = useMutation({
-    mutationFn: () => postJson("/api/provider/owners", {
-      username: ownerForm.username,
-      password: ownerForm.password,
-      officeName: ownerForm.officeName || null,
-      expiresAt: ownerForm.customDate && ownerForm.expiresAt ? ownerForm.expiresAt : null,
-    }),
+    mutationFn: () =>
+      postJson("/api/provider/owners", {
+        username: ownerForm.username,
+        password: ownerForm.password,
+        officeName: ownerForm.officeName || null,
+        // Server computes calendar-safe expiry from months; custom date sent as-is.
+        months: ownerForm.duration !== "custom" && ownerForm.duration !== "none" ? Number(ownerForm.duration) : null,
+        expiresAt: ownerForm.duration === "custom" ? ownerForm.expiresAt || null : null,
+      }),
     onSuccess: () => {
       invalidate();
       setOwnerOpen(false);
-      setOwnerForm({ username: "", password: "", officeName: "", customDate: false, expiresAt: "" });
+      setOwnerForm({ username: "", password: "", officeName: "", duration: "12", expiresAt: "" });
       toast({ title: "تم إنشاء حساب المكتب" });
     },
     onError: () => toast({ title: "تعذّر إنشاء الحساب", variant: "destructive" }),
@@ -98,6 +100,12 @@ export default function ProviderPage() {
     mutationFn: (months: number) => postJson(`/api/provider/accounts/${renewId}/renew`, { months }),
     onSuccess: () => { invalidate(); setRenewId(null); toast({ title: "تم تجديد الاشتراك بنجاح" }); },
     onError: () => toast({ title: "تعذّر التجديد", variant: "destructive" }),
+  });
+
+  const renewCustomMut = useMutation({
+    mutationFn: () => patchJson(`/api/provider/accounts/${renewId}/expiry`, { expiresAt: renewCustomDate }),
+    onSuccess: () => { invalidate(); setRenewId(null); setRenewCustomDate(""); toast({ title: "تم تحديث تاريخ الانتهاء" }); },
+    onError: () => toast({ title: "تعذّر التحديث", variant: "destructive" }),
   });
 
   const officeNameMut = useMutation({
@@ -128,11 +136,6 @@ export default function ProviderPage() {
   const pwdMut = useMutation({
     mutationFn: () => patchJson(`/api/provider/accounts/${pwdId}/password`, { password: pwdVal }),
     onSuccess: () => { setPwdId(null); setPwdVal(""); toast({ title: "تم تغيير كلمة المرور" }); },
-  });
-
-  const expiryMut = useMutation({
-    mutationFn: () => patchJson(`/api/provider/accounts/${expiryId}/expiry`, { expiresAt: expiryVal || null }),
-    onSuccess: () => { invalidate(); setExpiryId(null); setExpiryVal(""); },
   });
 
   const deleteMut = useMutation({
@@ -211,7 +214,6 @@ export default function ProviderPage() {
                             <Button variant="ghost" size="sm" className="h-7 px-2" title="اسم المكتب (مرجع)" onClick={() => { setOfficeNameId(a.id); setOfficeNameVal(a.officeName ?? ""); }}><Building2 className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير الاسم" onClick={() => { setRenameId(a.id); setRenameVal(a.username); }}><User className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2" title="تغيير كلمة المرور" onClick={() => { setPwdId(a.id); setPwdVal(""); }}><Key className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 px-2" title="تاريخ مخصص" onClick={() => { setExpiryId(a.id); setExpiryVal(a.expiresAt ? String(a.expiresAt).slice(0, 10) : ""); }}><Calendar className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" title="حذف المكتب" onClick={() => setDeleteId(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </td>
@@ -319,11 +321,15 @@ export default function ProviderPage() {
                 <Input value={ownerForm.officeName} onChange={(e) => setOwnerForm((f) => ({ ...f, officeName: e.target.value }))} placeholder="مثال: مكتب النور للعمرة — صنعاء" />
                 <p className="text-xs text-muted-foreground">يظهر في جدول الحسابات لتعرف هذا الحساب يخص أي مكتب.</p>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={ownerForm.customDate} onChange={(e) => setOwnerForm((f) => ({ ...f, customDate: e.target.checked }))} />
-                تاريخ مخصص
-              </label>
-              {ownerForm.customDate && (
+              <div className="space-y-1.5">
+                <Label>مدة الاشتراك</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[{ v: "1", t: "شهر" }, { v: "3", t: "3 أشهر" }, { v: "6", t: "6 أشهر" }, { v: "12", t: "سنة" }, { v: "none", t: "غير محدود" }, { v: "custom", t: "تاريخ مخصص" }].map(({ v, t }) => (
+                    <Button key={v} type="button" variant={ownerForm.duration === v ? "default" : "outline"} size="sm" onClick={() => setOwnerForm((f) => ({ ...f, duration: v }))}>{t}</Button>
+                  ))}
+                </div>
+              </div>
+              {ownerForm.duration === "custom" && (
                 <div className="space-y-1.5">
                   <Label>تاريخ الانتهاء</Label>
                   <Input type="date" value={ownerForm.expiresAt} onChange={(e) => setOwnerForm((f) => ({ ...f, expiresAt: e.target.value }))} dir="ltr" className="text-left" />
@@ -420,6 +426,13 @@ export default function ProviderPage() {
                 </Button>
               ))}
             </div>
+            <div className="space-y-1.5 border-t pt-3">
+              <Label>أو تاريخ انتهاء مخصص</Label>
+              <div className="flex gap-2">
+                <Input type="date" value={renewCustomDate} onChange={(e) => setRenewCustomDate(e.target.value)} dir="ltr" className="text-left" />
+                <Button disabled={!renewCustomDate || renewCustomMut.isPending} onClick={() => renewCustomMut.mutate()}>حفظ</Button>
+              </div>
+            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setRenewId(null)}>إلغاء</Button>
             </DialogFooter>
@@ -437,21 +450,6 @@ export default function ProviderPage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setOfficeNameId(null)}>إلغاء</Button>
               <Button onClick={() => officeNameMut.mutate()} disabled={officeNameMut.isPending || !officeNameVal.trim()}>حفظ</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Expiry Dialog */}
-        <Dialog open={expiryId != null} onOpenChange={(o) => { if (!o) setExpiryId(null); }}>
-          <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>تاريخ الانتهاء</DialogTitle></DialogHeader>
-            <div className="space-y-2 py-2">
-              <Label>تاريخ الانتهاء</Label>
-              <Input type="date" value={expiryVal} onChange={(e) => setExpiryVal(e.target.value)} dir="ltr" className="text-left" />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setExpiryId(null)}>إلغاء</Button>
-              <Button onClick={() => expiryMut.mutate()} disabled={expiryMut.isPending}>حفظ</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

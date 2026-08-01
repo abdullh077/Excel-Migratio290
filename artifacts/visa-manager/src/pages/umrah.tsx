@@ -225,7 +225,7 @@ export default function UmrahPage() {
       agent: form.agent,
       issueDate: form.issueDate,
       stayDuration: Number(form.stayDuration),
-      entryDate: form.entryDate || null,
+      entryDate: form.entryDate || undefined,
       issuingAuthority: form.issuingAuthority,
       transactionParty: form.transactionParty || "",
       sendStatus: form.sendStatus,
@@ -273,10 +273,21 @@ export default function UmrahPage() {
       .replace(/\{[^}]*\}/g, "");
   }
 
-  function handleWhatsApp(c: Umrah) {
-    const message = buildMessage(c);
-    const phone = String(c.phone ?? "").replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  async function handleWhatsApp(c: Umrah) {
+    // Open the tab synchronously (popup blockers), then point it at the
+    // freshest record so an edited phone number is used immediately.
+    const win = window.open("", "_blank");
+    let fresh: Umrah = c;
+    try {
+      fresh = await apiGet(`/api/umrah/${c.id}`);
+    } catch {
+      // offline or transient error — fall back to the row we have
+    }
+    const message = buildMessage(fresh);
+    const phone = String(fresh.phone ?? "").replace(/\D/g, "");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
     patchStatus.mutate({ id: c.id, payload: { sendStatus: "تم الإرسال" } });
   }
 
@@ -455,7 +466,7 @@ export default function UmrahPage() {
               <Field label="مدة الإقامة (يوم)" required type="number" value={String(form.stayDuration)} onChange={(v) => setForm((f: any) => ({ ...f, stayDuration: v === "" ? "" : Number(v) }))} error={errors.stayDuration} />
               <Field label="تاريخ دخول المملكة (اختياري)" type="date" value={form.entryDate} onChange={(v) => setForm((f: any) => ({ ...f, entryDate: v }))} />
               <Field label="جهة الإصدار" required value={form.issuingAuthority} onChange={(v) => setForm((f: any) => ({ ...f, issuingAuthority: v }))} error={errors.issuingAuthority} />
-              <Field label="جهة المعاملة (تظهر في السند)" placeholder="اسم جهة المعاملة" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
+              <Field label="ترحيل عبر (يظهر في السند)" placeholder="ترحيل عبر" value={form.transactionParty} onChange={(v) => setForm((f: any) => ({ ...f, transactionParty: v }))} />
               <div className="space-y-1.5">
                 <Label>حالة الإرسال</Label>
                 <select
