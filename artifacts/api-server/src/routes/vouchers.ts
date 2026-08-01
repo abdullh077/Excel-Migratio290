@@ -5,7 +5,7 @@ import { requireOwner } from "../lib/auth.js";
 import { CreateVoucherBody, DeleteVoucherParams, GetVoucherParams, ListVouchersQueryParams } from "@workspace/api-zod";
 
 const router = Router();
-router.use(requireOwner);
+router.use("/vouchers", requireOwner);
 
 function toVoucher(v: typeof vouchersTable.$inferSelect) {
   return { id: v.id, kind: v.kind, partyType: v.partyType, partyName: v.partyName, amount: Number(v.amount), description: v.description, voucherDate: v.voucherDate.toISOString(), agentPaymentId: v.agentPaymentId, createdAt: v.createdAt.toISOString() };

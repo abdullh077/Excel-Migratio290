@@ -1,19 +1,33 @@
 import { Router } from "express";
 import { db, umrahClientsTable, otherVisasTable } from "@workspace/db";
-import { eq, sql, ilike, and } from "drizzle-orm";
+import { eq, sql, ilike, and, or } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 
 const router = Router();
-router.use(requireOffice);
+router.use("/archive", requireOffice);
 
 router.get("/archive", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
   const { search, visaType, month, year } = req.query as Record<string, string>;
+  const term = search ? `%${search}%` : "";
 
   const umrahRows = await db.select().from(umrahClientsTable).where(
     and(
       eq(umrahClientsTable.userId, officeId),
-      search ? ilike(umrahClientsTable.clientName, `%${search}%`) : undefined,
+      search
+        ? or(
+            ilike(umrahClientsTable.clientName, term),
+            ilike(umrahClientsTable.passportNumber, term),
+            ilike(umrahClientsTable.phone, term),
+            ilike(umrahClientsTable.agent, term),
+            ilike(umrahClientsTable.issuingAuthority, term),
+            ilike(umrahClientsTable.transactionParty, term),
+            ilike(umrahClientsTable.sendStatus, term),
+            ilike(umrahClientsTable.notes, term),
+            ilike(umrahClientsTable.issueDate, term),
+            ilike(sql`${umrahClientsTable.entryDate}::text`, term)
+          )
+        : undefined,
       month && year ? sql`EXTRACT(MONTH FROM ${umrahClientsTable.createdAt}) = ${Number(month)} AND EXTRACT(YEAR FROM ${umrahClientsTable.createdAt}) = ${Number(year)}` : undefined,
       visaType && visaType !== "umrah" ? sql`false` : undefined,
     )
@@ -22,7 +36,21 @@ router.get("/archive", async (req, res): Promise<void> => {
   const visaRows = await db.select().from(otherVisasTable).where(
     and(
       eq(otherVisasTable.userId, officeId),
-      search ? ilike(otherVisasTable.clientName, `%${search}%`) : undefined,
+      search
+        ? or(
+            ilike(otherVisasTable.clientName, term),
+            ilike(otherVisasTable.passportNumber, term),
+            ilike(otherVisasTable.requestNumber, term),
+            ilike(otherVisasTable.phone, term),
+            ilike(otherVisasTable.agent, term),
+            ilike(otherVisasTable.visaType, term),
+            ilike(otherVisasTable.issuingAuthority, term),
+            ilike(otherVisasTable.transactionParty, term),
+            ilike(otherVisasTable.sendStatus, term),
+            ilike(otherVisasTable.notes, term),
+            ilike(otherVisasTable.issueDate, term)
+          )
+        : undefined,
       visaType && visaType !== "umrah" ? eq(otherVisasTable.visaType, visaType) : undefined,
       month && year ? sql`EXTRACT(MONTH FROM ${otherVisasTable.createdAt}) = ${Number(month)} AND EXTRACT(YEAR FROM ${otherVisasTable.createdAt}) = ${Number(year)}` : undefined,
     )

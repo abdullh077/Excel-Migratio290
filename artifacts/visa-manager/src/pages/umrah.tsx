@@ -115,6 +115,9 @@ export default function UmrahPage() {
       setDialogOpen(false);
       toast({ title: "تم الحفظ بنجاح" });
     },
+    onError: () => {
+      toast({ title: "تعذّر الحفظ", description: "حدث خطأ، يرجى المحاولة مرة أخرى", variant: "destructive" });
+    },
   });
 
   const update = useMutation({
@@ -132,17 +135,24 @@ export default function UmrahPage() {
       invalidate();
       setDialogOpen(false);
     },
+    onError: () => {
+      toast({ title: "تعذّر التعديل", description: "حدث خطأ، يرجى المحاولة مرة أخرى", variant: "destructive" });
+    },
   });
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/umrah/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error(String(res.status));
+      // DELETE may return JSON ({message}) or an empty body; don't assume either.
       return true;
     },
     onSuccess: () => {
       invalidate();
       toast({ title: "تم الحذف بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "تعذّر الحذف", description: "حدث خطأ، يرجى المحاولة مرة أخرى", variant: "destructive" });
     },
   });
 
@@ -288,7 +298,7 @@ export default function UmrahPage() {
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pr-9"
-            placeholder="بحث بالاسم، الجواز، أو الجوال..."
+            placeholder="بحث شامل في جميع الحقول..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

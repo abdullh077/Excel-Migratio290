@@ -58,6 +58,8 @@ export default function ReceiptPage() {
   const officeName = office?.officeName || OFFICE_FALLBACK;
   const officeLogo = office?.officeLogo || null;
   const supportPhone = office?.officePhone || PHONE_FALLBACK;
+  const stampImage = office?.stampImage || null;
+  const signatureImage = office?.signatureImage || null;
 
   const backHref = isUmrah ? "/umrah" : "/visas";
   const receiptId = "#" + String(record.id).padStart(6, "0");
@@ -91,17 +93,19 @@ export default function ReceiptPage() {
         <div className="bg-white border rounded-lg shadow-sm p-8 print:shadow-none print:border-0 print:rounded-none print:p-6">
           {/* Header */}
           <div className="flex items-start justify-between border-b pb-4 mb-6">
+            {/* Office identity — right side (first in RTL) */}
             <div className="flex items-center gap-3">
               {officeLogo && <img src={officeLogo} alt="شعار المكتب" className="h-16 w-16 object-contain" />}
-              <div>
-                <h1 className="text-lg font-bold text-primary">{officeName}</h1>
+              <div className="text-right">
+                <h1 className="text-lg font-bold text-primary print:text-base">{officeName}</h1>
                 <p className="text-xs text-gray-500">{SUBTITLE_FALLBACK}</p>
               </div>
             </div>
+            {/* Date / receipt number — far left column (last in RTL) */}
             <div className="text-left">
               <p className="text-xs text-gray-500">التاريخ: {formatDate(record.createdAt)}</p>
               <p className="text-xs text-gray-500 mt-1">رقم السند: {receiptId}</p>
-              <p className="text-xs text-gray-500 mt-1">للتواصل والدعم</p>
+              <p className="text-xs text-gray-500 mt-3">للتواصل والدعم</p>
               <p className="text-xs text-gray-500" dir="ltr">{supportPhone}</p>
             </div>
           </div>
@@ -134,7 +138,7 @@ export default function ReceiptPage() {
                 <td className="border px-3 py-2">{transaction}</td>
                 <td className="border px-3 py-2">
                   <div>تاريخ الإصدار: {formatDate(record.issueDate)}</div>
-                  {record.transactionParty && <div>جهة المعاملة: {record.transactionParty}</div>}
+                  {record.transactionParty && <div>ترحيل عبر: {record.transactionParty}</div>}
                 </td>
                 <td className="border px-3 py-2" dir="ltr">{fmt(paid)}</td>
                 <td className="border px-3 py-2" dir="ltr">{fmt(remaining)}</td>
@@ -160,9 +164,18 @@ export default function ReceiptPage() {
           {/* Signatures */}
           <div className="grid grid-cols-2 gap-8 mt-12 mb-6">
             <div className="text-center">
+              <div className="flex items-end justify-center gap-2 h-24 mb-1">
+                {signatureImage && (
+                  <img src={signatureImage} alt="توقيع المستلم" className="max-h-[100px] w-auto object-contain print:max-h-[90px]" />
+                )}
+                {stampImage && (
+                  <img src={stampImage} alt="ختم المكتب" className="max-h-[110px] w-auto object-contain print:max-h-[100px]" />
+                )}
+              </div>
               <div className="border-t pt-2 text-xs text-gray-600">توقيع المستلم (المكتب)</div>
             </div>
             <div className="text-center">
+              <div className="h-24 mb-1" />
               <div className="border-t pt-2 text-xs text-gray-600">توقيع المسلم (العميل)</div>
             </div>
           </div>

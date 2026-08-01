@@ -9,8 +9,11 @@ import { UpdateOfficeSettingsBody } from "@workspace/api-zod";
 const router = Router();
 
 // PUBLIC — used on the login page before any session exists.
+// Mounted separately in routes/index.ts BEFORE any auth-guarded routers.
+export const publicSettingsRouter = Router();
+
 // Returns the branding (office name + logo) of the most recently updated office.
-router.get("/settings/branding", async (_req, res): Promise<void> => {
+publicSettingsRouter.get("/settings/branding", async (_req, res): Promise<void> => {
   const [row] = await db
     .select({ officeName: officeSettingsTable.officeName, officeLogo: officeSettingsTable.officeLogo })
     .from(officeSettingsTable)
@@ -21,7 +24,7 @@ router.get("/settings/branding", async (_req, res): Promise<void> => {
 });
 
 // Everything below requires an authenticated office session.
-router.use(requireOffice);
+router.use("/settings", requireOffice);
 
 const BrandingBody = z.object({
   officeLogo: z.string().nullish(),

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, otherVisasTable } from "@workspace/db";
-import { eq, and, ilike, sql } from "drizzle-orm";
+import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 import {
   CreateVisaBody,
@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
-router.use(requireOffice);
+router.use("/visas", requireOffice);
 
 function toVisa(r: typeof otherVisasTable.$inferSelect) {
   const sale = Number(r.salePrice);
@@ -38,7 +38,27 @@ router.get("/visas", async (req, res): Promise<void> => {
   let query = db.select().from(otherVisasTable).where(eq(otherVisasTable.userId, officeId)).$dynamic();
   if (q.success) {
     const { search, visaType, agent, month, year } = q.data;
-    if (search) query = query.where(and(eq(otherVisasTable.userId, officeId), ilike(otherVisasTable.clientName, `%${search}%`)));
+    if (search) {
+      const term = `%${search}%`;
+      query = query.where(
+        and(
+          eq(otherVisasTable.userId, officeId),
+          or(
+            ilike(otherVisasTable.clientName, term),
+            ilike(otherVisasTable.passportNumber, term),
+            ilike(otherVisasTable.requestNumber, term),
+            ilike(otherVisasTable.phone, term),
+            ilike(otherVisasTable.agent, term),
+            ilike(otherVisasTable.visaType, term),
+            ilike(otherVisasTable.issuingAuthority, term),
+            ilike(otherVisasTable.transactionParty, term),
+            ilike(otherVisasTable.sendStatus, term),
+            ilike(otherVisasTable.notes, term),
+            ilike(otherVisasTable.issueDate, term)
+          )
+        )
+      );
+    }
     if (visaType) query = query.where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.visaType, visaType)));
     if (agent) query = query.where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent)));
     if (month && year) query = query.where(and(eq(otherVisasTable.userId, officeId), sql`EXTRACT(MONTH FROM ${otherVisasTable.createdAt}) = ${month}`, sql`EXTRACT(YEAR FROM ${otherVisasTable.createdAt}) = ${year}`));
@@ -51,8 +71,13 @@ router.post("/visas", async (req, res): Promise<void> => {
   const parsed = CreateVisaBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
-  const { clientRequestId, ...rest } = parsed.data as any;
-  const [row] = await db.insert(otherVisasTable).values({ ...rest, userId: officeId, clientRequestId: clientRequestId ?? null }).onConflictDoNothing().returning();
+  const { clientRequestId: rawRequestId, ...rest } = parsed.data as any;
+  // Normalize empty/blank clientRequestId to null so it never collides on the
+  // unique index (empty strings would otherwise dedup to the first-ever record
+  // and block all subsequent creates).
+  const clientRequestId =
+    typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
+  const [row] = await db.insert(otherVisasTable).values({ ...rest, userId: officeId, clientRequestId }).onConflictDoNothing().returning();
   if (!row) {
     if (clientRequestId) {
       const [existing] = await db.select().from(otherVisasTable).where(eq(otherVisasTable.clientRequestId, clientRequestId));

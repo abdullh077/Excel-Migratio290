@@ -38,7 +38,7 @@ export default function ArchivePage() {
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pr-9"
-            placeholder="بحث شامل بالاسم، الجواز، الجوال..."
+            placeholder="بحث شامل في جميع الحقول..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

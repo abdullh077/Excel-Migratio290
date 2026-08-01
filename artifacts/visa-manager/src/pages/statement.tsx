@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
+import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Exact currency formatter as production `nt`
@@ -38,6 +38,9 @@ function La(e: string | null | undefined): string {
 const AGENTS_KEY = ["statement-agents"];
 const LEDGER_KEY = ["statement-ledger"];
 const SUMMARY_KEY = ["statement-summary"];
+const CLIENTS_KEY = ["statement-clients"];
+const VOUCHERS_KEY = ["vouchers"];
+const OFFICE_KEY = ["settings-office"];
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -61,6 +64,16 @@ const createLedger = (body: any) =>
 const deleteLedger = (id: any) =>
   fetch(`/api/statement/ledger/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
 const getSummary = () => fetch("/api/statement/summary", { credentials: "include" }).then(handle);
+const listClients = () => fetch("/api/statement/clients", { credentials: "include" }).then(handle);
+const getClientDetails = (name: string) =>
+  fetch(`/api/statement/clients/details?name=${encodeURIComponent(name)}`, { credentials: "include" }).then(handle);
+const listVouchers = () => fetch("/api/vouchers", { credentials: "include" }).then(handle);
+const createVoucher = (body: any) =>
+  fetch("/api/vouchers", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+const deleteVoucher = (id: any) =>
+  fetch(`/api/vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
+const getOffice = () => fetch("/api/settings/office", { credentials: "include" }).then(handle);
+const listAgentNames = () => fetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
 
 async function handle(res: Response) {
   if (!res.ok) {
@@ -69,6 +82,26 @@ async function handle(res: Response) {
   }
   if (res.status === 204) return null;
   return res.json().catch(() => null);
+}
+
+function todayISO(): string {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+function ClientBalanceBadge({ balance }: { balance: number }) {
+  if (balance > 0)
+    return (
+      <Badge variant="destructive" className="text-xs">
+        عليه {nt(balance)}
+      </Badge>
+    );
+  return (
+    <Badge variant="outline" className="text-xs">
+      مسدَّد
+    </Badge>
+  );
 }
 
 function BalanceBadge({ balance }: { balance: number }) {
@@ -135,6 +168,18 @@ export default function StatementPage() {
   const [ledgerAmount, setLedgerAmount] = useState("");
   const [ledgerDesc, setLedgerDesc] = useState("");
 
+  // clients tab
+  const [selectedClient, setSelectedClient] = useState<string | null>(null);
+
+  // vouchers tab
+  const [voucherDialog, setVoucherDialog] = useState(false);
+  const [voucherKind, setVoucherKind] = useState<"receipt" | "payment">("receipt");
+  const [vParty, setVParty] = useState("");
+  const [vAmount, setVAmount] = useState("");
+  const [vDesc, setVDesc] = useState("");
+  const [vDate, setVDate] = useState(todayISO());
+  const [printVoucher, setPrintVoucher] = useState<any>(null);
+
   const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
   const { data: ledger, isLoading: ledgerLoading } = useQuery({ queryKey: LEDGER_KEY, queryFn: listLedger });
   const { data: summary, isLoading: summaryLoading } = useQuery({ queryKey: SUMMARY_KEY, queryFn: getSummary });
@@ -143,6 +188,15 @@ export default function StatementPage() {
     queryFn: () => getAgent(selected),
     enabled: selected != null,
   });
+  const { data: clients, isLoading: clientsLoading } = useQuery({ queryKey: CLIENTS_KEY, queryFn: listClients });
+  const { data: clientDetail, isLoading: clientDetailLoading } = useQuery({
+    queryKey: ["statement-client", selectedClient],
+    queryFn: () => getClientDetails(selectedClient!),
+    enabled: selectedClient != null,
+  });
+  const { data: vouchers, isLoading: vouchersLoading } = useQuery({ queryKey: VOUCHERS_KEY, queryFn: listVouchers });
+  const { data: office } = useQuery({ queryKey: OFFICE_KEY, queryFn: getOffice });
+  const { data: agentNames } = useQuery({ queryKey: ["agent-names"], queryFn: listAgentNames });
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: AGENTS_KEY });
@@ -229,6 +283,51 @@ export default function StatementPage() {
     onError,
   });
 
+  const addVoucher = useMutation({
+    mutationFn: () =>
+      createVoucher({
+        kind: voucherKind,
+        partyType: "other",
+        partyName: vParty.trim(),
+        amount: Number(vAmount),
+        description: vDesc.trim() || undefined,
+        voucherDate: vDate ? new Date(vDate).toISOString() : undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
+      setVoucherDialog(false);
+      setVParty("");
+      setVAmount("");
+      setVDesc("");
+      setVDate(todayISO());
+      toast({ title: voucherKind === "receipt" ? "تم إنشاء سند القبض" : "تم إنشاء سند الصرف" });
+    },
+    onError,
+  });
+
+  const delVoucher = useMutation({
+    mutationFn: (id: any) => deleteVoucher(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
+      toast({ title: "تم حذف السند" });
+    },
+    onError,
+  });
+
+  const openVoucher = (kind: "receipt" | "payment") => {
+    setVoucherKind(kind);
+    setVParty("");
+    setVAmount("");
+    setVDesc("");
+    setVDate(todayISO());
+    setVoucherDialog(true);
+  };
+
+  const partyOptions: string[] = [
+    ...((agentNames as string[] | undefined) ?? []),
+    ...((clients as any[] | undefined)?.map((c) => c.clientName) ?? []),
+  ].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
   const openNew = () => {
     setEditing(null);
     setNameField("");
@@ -245,18 +344,31 @@ export default function StatementPage() {
   return (
     <AppLayout>
       <div className="p-4 sm:p-6 md:p-8 space-y-6" dir="rtl">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 no-print">
           <BarChart3 className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">كشف الحساب</h1>
-            <p className="text-sm text-muted-foreground">حسابات الوكلاء، الدخل والنفقات، والملخص الشهري</p>
+            <p className="text-sm text-muted-foreground">حسابات الوكلاء، حسابات العملاء، السندات، الدخل والنفقات، والملخص الشهري</p>
           </div>
         </div>
 
+        {/* Print-only statement header */}
+        <div className="hidden print:block text-center mb-4 border-b border-black pb-3">
+          <p className="text-xl font-bold">{office?.officeName || "المكتب"}</p>
+          <p className="text-lg font-semibold mt-1">كشف الحساب</p>
+          <p className="text-sm mt-1">{La(todayISO())}</p>
+        </div>
+
         <Tabs defaultValue="agents" dir="rtl">
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 no-print flex-wrap h-auto">
             <TabsTrigger value="agents">
               <Users className="w-4 h-4 ml-1.5" /> الوكلاء
+            </TabsTrigger>
+            <TabsTrigger value="clients">
+              <Wallet className="w-4 h-4 ml-1.5" /> حساب العملاء
+            </TabsTrigger>
+            <TabsTrigger value="vouchers">
+              <Receipt className="w-4 h-4 ml-1.5" /> السندات
             </TabsTrigger>
             <TabsTrigger value="ledger">
               <TrendingUp className="w-4 h-4 ml-1.5" /> الدخل والنفقات
@@ -268,13 +380,18 @@ export default function StatementPage() {
 
           {/* Agents tab */}
           <TabsContent value="agents" className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between no-print">
               <p className="text-sm text-muted-foreground">
                 سجّل وكلاءك هنا، واختر اسم الوكيل عند إضافة أي معاملة ليظهر في كشفه.
               </p>
-              <Button onClick={openNew}>
-                <Plus className="w-4 h-4 ml-1.5" /> وكيل جديد
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+                </Button>
+                <Button onClick={openNew}>
+                  <Plus className="w-4 h-4 ml-1.5" /> وكيل جديد
+                </Button>
+              </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
@@ -336,9 +453,149 @@ export default function StatementPage() {
             </div>
           </TabsContent>
 
+          {/* Clients tab */}
+          <TabsContent value="clients" className="space-y-4">
+            <div className="flex items-center justify-between no-print">
+              <p className="text-sm text-muted-foreground">
+                كشوف حسابات العملاء تُبنى تلقائياً من التأشيرات. اضغط على أي عميل لعرض التفاصيل.
+              </p>
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+              </Button>
+            </div>
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="whitespace-nowrap">
+                    <TableHead className="text-right">العميل</TableHead>
+                    <TableHead className="text-right">الهاتف</TableHead>
+                    <TableHead className="text-right">المعاملات</TableHead>
+                    <TableHead className="text-right">إجمالي البيع</TableHead>
+                    <TableHead className="text-right">المقبوض</TableHead>
+                    <TableHead className="text-right">الرصيد</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clientsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                      </TableCell>
+                    </TableRow>
+                  ) : clients?.length ? (
+                    clients.map((c: any) => (
+                      <TableRow
+                        key={c.clientName}
+                        className="whitespace-nowrap hover:bg-muted/30 cursor-pointer"
+                        onClick={() => setSelectedClient(c.clientName)}
+                      >
+                        <TableCell className="font-medium">{c.clientName}</TableCell>
+                        <TableCell>{c.phone || "-"}</TableCell>
+                        <TableCell>{c.txCount}</TableCell>
+                        <TableCell>{nt(c.totalSales)}</TableCell>
+                        <TableCell className="text-emerald-600 font-medium">{nt(c.totalReceived)}</TableCell>
+                        <TableCell>
+                          <ClientBalanceBadge balance={c.balance} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <EmptyRow colSpan={6} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Vouchers tab */}
+          <TabsContent value="vouchers" className="space-y-4">
+            <div className="flex items-center justify-between no-print">
+              <p className="text-sm text-muted-foreground">
+                أنشئ سندات القبض والصرف النقدية للوكلاء والعملاء والجهات الأخرى.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+                </Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openVoucher("receipt")}>
+                  <ArrowUpCircle className="w-4 h-4 ml-1.5" /> سند قبض
+                </Button>
+                <Button variant="destructive" onClick={() => openVoucher("payment")}>
+                  <ArrowDownCircle className="w-4 h-4 ml-1.5" /> سند صرف
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="whitespace-nowrap">
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">النوع</TableHead>
+                    <TableHead className="text-right">الطرف</TableHead>
+                    <TableHead className="text-right">المبلغ</TableHead>
+                    <TableHead className="text-right">البيان</TableHead>
+                    <TableHead className="text-right no-print">إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {vouchersLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                      </TableCell>
+                    </TableRow>
+                  ) : vouchers?.length ? (
+                    vouchers.map((v: any) => (
+                      <TableRow key={v.id} className="whitespace-nowrap hover:bg-muted/30">
+                        <TableCell>{La(v.voucherDate)}</TableCell>
+                        <TableCell>
+                          {v.kind === "receipt" ? (
+                            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-xs">
+                              <ArrowUpCircle className="w-3 h-3 ml-1" /> سند قبض
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-xs">
+                              <ArrowDownCircle className="w-3 h-3 ml-1" /> سند صرف
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{v.partyName}</TableCell>
+                        <TableCell className="font-medium">{nt(Number(v.amount))}</TableCell>
+                        <TableCell>{v.description || "-"}</TableCell>
+                        <TableCell className="no-print">
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm" onClick={() => setPrintVoucher(v)}>
+                              <Printer className="w-4 h-4 ml-1" /> طباعة
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              onClick={() => delVoucher.mutate(v.id)}
+                              aria-label="حذف"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <EmptyRow colSpan={6} icon={Receipt} title="لا توجد سندات بعد" hint="أنشئ سند قبض أو سند صرف لتظهر هنا" />
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
           {/* Ledger tab */}
           <TabsContent value="ledger" className="space-y-4">
-            <div className="rounded-lg border border-border bg-card p-4 flex flex-wrap items-end gap-3">
+            <div className="flex justify-end no-print">
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+              </Button>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-4 flex flex-wrap items-end gap-3 no-print">
               <div>
                 <p className="text-sm mb-1.5 font-medium">النوع</p>
                 <Select value={ledgerType} onValueChange={(v) => setLedgerType(v)}>
@@ -434,7 +691,12 @@ export default function StatementPage() {
           </TabsContent>
 
           {/* Summary tab */}
-          <TabsContent value="summary">
+          <TabsContent value="summary" className="space-y-4">
+            <div className="flex justify-end no-print">
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+              </Button>
+            </div>
             <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -698,6 +960,223 @@ export default function StatementPage() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Client detail dialog */}
+        <Dialog
+          open={selectedClient != null}
+          onOpenChange={(o) => {
+            if (!o) setSelectedClient(null);
+          }}
+        >
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" dir="rtl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" /> كشف حساب — {selectedClient ?? ""}
+              </DialogTitle>
+            </DialogHeader>
+            {clientDetailLoading || !clientDetail ? (
+              <div className="py-12 text-center">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">المعاملات</p>
+                    <p className="font-bold text-lg">{clientDetail.account.txCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">إجمالي البيع</p>
+                    <p className="font-bold text-lg">{nt(clientDetail.account.totalSales)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">المقبوض</p>
+                    <p className="font-bold text-lg text-emerald-600">{nt(clientDetail.account.totalReceived)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">الرصيد</p>
+                    <ClientBalanceBadge balance={clientDetail.account.balance} />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-semibold mb-2">المعاملات ({clientDetail.account.txCount})</p>
+                  <div className="rounded-lg border border-border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="whitespace-nowrap">
+                          <TableHead className="text-right">التاريخ</TableHead>
+                          <TableHead className="text-right">النوع</TableHead>
+                          <TableHead className="text-right">البيع</TableHead>
+                          <TableHead className="text-right">المقبوض</TableHead>
+                          <TableHead className="text-right">المتبقي</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clientDetail.transactions.length ? (
+                          clientDetail.transactions.map((t: any) => (
+                            <TableRow key={t.id} className="whitespace-nowrap">
+                              <TableCell>{La(t.issueDate)}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">{t.type}</Badge>
+                              </TableCell>
+                              <TableCell>{nt(t.salePrice)}</TableCell>
+                              <TableCell className="text-emerald-600">{nt(t.receivedFromClient)}</TableCell>
+                              <TableCell className="font-medium">{nt(t.salePrice - t.receivedFromClient)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <EmptyRow colSpan={5} icon={Wallet} title="لا توجد معاملات" />
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create voucher dialog */}
+        <Dialog
+          open={voucherDialog}
+          onOpenChange={(o) => {
+            if (!o) setVoucherDialog(false);
+          }}
+        >
+          <DialogContent className="max-w-sm" dir="rtl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {voucherKind === "receipt" ? (
+                  <>
+                    <ArrowUpCircle className="w-5 h-5 text-emerald-600" /> سند قبض
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownCircle className="w-5 h-5 text-destructive" /> سند صرف
+                  </>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm mb-1.5 font-medium">اسم الطرف</p>
+                <Input
+                  list="voucher-party-list"
+                  value={vParty}
+                  onChange={(e) => setVParty(e.target.value)}
+                  placeholder="اسم الوكيل أو العميل أو الجهة"
+                />
+                <datalist id="voucher-party-list">
+                  {partyOptions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">المبلغ</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={vAmount}
+                  onChange={(e) => setVAmount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">البيان</p>
+                <Input value={vDesc} onChange={(e) => setVDesc(e.target.value)} placeholder="سبب القبض / الصرف" />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">التاريخ</p>
+                <Input type="date" value={vDate} onChange={(e) => setVDate(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setVoucherDialog(false)}>
+                إلغاء
+              </Button>
+              <Button
+                disabled={!vParty.trim() || !Number(vAmount) || addVoucher.isPending}
+                onClick={() => addVoucher.mutate()}
+              >
+                {addVoucher.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Print voucher dialog */}
+        <Dialog
+          open={printVoucher != null}
+          onOpenChange={(o) => {
+            if (!o) setPrintVoucher(null);
+          }}
+        >
+          <DialogContent className="max-w-lg" dir="rtl">
+            <DialogHeader className="no-print">
+              <DialogTitle>
+                {printVoucher?.kind === "receipt" ? "سند قبض نقدية" : "سند صرف نقدية"}
+              </DialogTitle>
+            </DialogHeader>
+            {printVoucher && (
+              <div className="voucher-print space-y-5 p-2">
+                <div className="text-center border-b border-black pb-3">
+                  <p className="text-xl font-bold">{office?.officeName || "المكتب"}</p>
+                  {office?.officePhone && <p className="text-sm mt-1">هاتف: {office.officePhone}</p>}
+                  <p className="text-lg font-bold mt-2">
+                    {printVoucher.kind === "receipt" ? "سند قبض نقدية" : "سند صرف نقدية"}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span>رقم السند: {printVoucher.id}</span>
+                  <span>التاريخ: {La(printVoucher.voucherDate)}</span>
+                </div>
+
+                <div className="text-sm">
+                  <span className="font-semibold">
+                    {printVoucher.kind === "receipt" ? "استلمنا من السيد/ة: " : "صرفنا للسيد/ة: "}
+                  </span>
+                  {printVoucher.partyName}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">المبلغ:</span>
+                  <span className="border-2 border-black rounded px-4 py-2 font-bold text-lg">
+                    {nt(Number(printVoucher.amount))}
+                  </span>
+                </div>
+
+                {printVoucher.description && (
+                  <div className="text-sm">
+                    <span className="font-semibold">وذلك عن: </span>
+                    {printVoucher.description}
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-10 text-sm">
+                  <div className="text-center">
+                    <p>توقيع المستلم</p>
+                    <p className="mt-8 border-t border-black w-32">&nbsp;</p>
+                  </div>
+                  <div className="text-center">
+                    <p>توقيع المحاسب</p>
+                    <p className="mt-8 border-t border-black w-32">&nbsp;</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2 no-print">
+              <Button variant="outline" onClick={() => setPrintVoucher(null)}>
+                إغلاق
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

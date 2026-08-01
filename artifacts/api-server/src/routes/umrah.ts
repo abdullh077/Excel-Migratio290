@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, umrahClientsTable } from "@workspace/db";
-import { eq, and, ilike, sql } from "drizzle-orm";
+import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 import {
   CreateUmrahClientBody,
@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
-router.use(requireOffice);
+router.use("/umrah", requireOffice);
 
 function computeStatus(client: { stayDuration: number; entryDate: string | Date | null }): string {
   if (!client.entryDate) return "خارج المملكة";
@@ -31,10 +31,22 @@ router.get("/umrah", async (req, res): Promise<void> => {
   if (q.success) {
     const { search, agent, month, year } = q.data;
     if (search) {
+      const term = `%${search}%`;
       query = query.where(
         and(
           eq(umrahClientsTable.userId, officeId),
-          ilike(umrahClientsTable.clientName, `%${search}%`)
+          or(
+            ilike(umrahClientsTable.clientName, term),
+            ilike(umrahClientsTable.passportNumber, term),
+            ilike(umrahClientsTable.phone, term),
+            ilike(umrahClientsTable.agent, term),
+            ilike(umrahClientsTable.issuingAuthority, term),
+            ilike(umrahClientsTable.transactionParty, term),
+            ilike(umrahClientsTable.sendStatus, term),
+            ilike(umrahClientsTable.notes, term),
+            ilike(umrahClientsTable.issueDate, term),
+            ilike(sql`${umrahClientsTable.entryDate}::text`, term)
+          )
         )
       );
     }
@@ -70,7 +82,12 @@ router.post("/umrah", async (req, res): Promise<void> => {
     return;
   }
   const officeId = req.session.officeId!;
-  const { clientRequestId, entryDate, ...rest } = parsed.data as any;
+  const { clientRequestId: rawRequestId, entryDate, ...rest } = parsed.data as any;
+  // Normalize empty/blank clientRequestId to null so it never collides on the
+  // unique index (empty strings would otherwise dedup to the first-ever record
+  // and block all subsequent creates).
+  const clientRequestId =
+    typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
 
   const [row] = await db
     .insert(umrahClientsTable)
@@ -78,18 +95,20 @@ router.post("/umrah", async (req, res): Promise<void> => {
       ...rest,
       userId: officeId,
       entryDate: entryDate ? new Date(entryDate) : null,
-      clientRequestId: clientRequestId ?? null,
+      clientRequestId,
     })
     .onConflictDoNothing()
     .returning();
 
   if (!row) {
-    // conflict = idempotent: return existing
-    const [existing] = await db.select().from(umrahClientsTable)
-      .where(eq(umrahClientsTable.clientRequestId, clientRequestId));
-    if (existing) {
-      res.status(201).json({ ...existing, purchasePrice: Number(existing.purchasePrice), salePrice: Number(existing.salePrice), profit: Number(existing.salePrice) - Number(existing.purchasePrice), status: computeStatus(existing), entryDate: existing.entryDate ? existing.entryDate.toISOString() : null, createdAt: existing.createdAt.toISOString() });
-      return;
+    // conflict = idempotent: return existing (only when a real request id was sent)
+    if (clientRequestId) {
+      const [existing] = await db.select().from(umrahClientsTable)
+        .where(eq(umrahClientsTable.clientRequestId, clientRequestId));
+      if (existing) {
+        res.status(201).json({ ...existing, purchasePrice: Number(existing.purchasePrice), salePrice: Number(existing.salePrice), profit: Number(existing.salePrice) - Number(existing.purchasePrice), status: computeStatus(existing), entryDate: existing.entryDate ? existing.entryDate.toISOString() : null, createdAt: existing.createdAt.toISOString() });
+        return;
+      }
     }
     res.status(409).json({ error: "Conflict" });
     return;

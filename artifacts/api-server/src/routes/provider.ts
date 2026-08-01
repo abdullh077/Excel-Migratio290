@@ -22,7 +22,7 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
-router.use(requireProvider);
+router.use("/provider", requireProvider);
 
 router.get("/provider/accounts", async (req, res): Promise<void> => {
   const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);

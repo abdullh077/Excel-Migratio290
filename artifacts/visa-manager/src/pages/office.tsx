@@ -54,8 +54,12 @@ export default function OfficePage() {
     whatsappOtherTemplate: "",
   });
   const [logo, setLogo] = useState<string | null>(null);
+  const [stamp, setStamp] = useState<string | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
   const [firstRunOpen, setFirstRunOpen] = useState(false);
   const logoInput = useRef<HTMLInputElement>(null);
+  const stampInput = useRef<HTMLInputElement>(null);
+  const signatureInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (settings) {
@@ -68,14 +72,29 @@ export default function OfficePage() {
         whatsappOtherTemplate: settings.whatsappOtherTemplate ?? "",
       });
       setLogo(settings.officeLogo ?? null);
+      setStamp(settings.stampImage ?? null);
+      setSignature(settings.signatureImage ?? null);
       if (settings.configured === false) setFirstRunOpen(true);
     }
   }, [settings]);
 
   const saveMut = useMutation({
-    mutationFn: () => saveOffice({ ...form, configured: true }),
+    mutationFn: async () => {
+      const result = await saveOffice({
+        ...form,
+        officeLogo: logo,
+        stampImage: stamp,
+        signatureImage: signature,
+        configured: true,
+      });
+      // Ensure the public branding row (read by the login page) has the logo too.
+      await saveBranding(logo);
+      return result;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: OFFICE_KEY });
+      if (logo) localStorage.setItem("oboor-last-logo", logo);
+      else localStorage.removeItem("oboor-last-logo");
       setFirstRunOpen(false);
       toast({ title: "تم حفظ بيانات المكتب" });
     },
@@ -121,6 +140,21 @@ export default function OfficePage() {
     brandingMut.mutate(null);
   }
 
+  function handleImageUpload(setter: (v: string | null) => void) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      if (file.size > 1.5 * 1024 * 1024) {
+        toast({ title: "اختر صورة أصغر من 1.5 ميجابايت", variant: "destructive" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => setter(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    };
+  }
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -157,6 +191,50 @@ export default function OfficePage() {
               </div>
               <input ref={logoInput} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
             </div>
+          </Card>
+
+          {/* Stamp */}
+          <Card className="p-5 space-y-3">
+            <Label>ختم المكتب (يظهر في السند)</Label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 border rounded-md bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {stamp ? <img src={stamp} alt="ختم المكتب" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => stampInput.current?.click()}>
+                  <Upload className="w-4 h-4 ml-1" />رفع صورة
+                </Button>
+                {stamp && (
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setStamp(null)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              <input ref={stampInput} type="file" accept="image/*" className="hidden" onChange={handleImageUpload(setStamp)} />
+            </div>
+            <p className="text-xs text-muted-foreground">احفظ البيانات لتطبيق التغيير على السند.</p>
+          </Card>
+
+          {/* Signature */}
+          <Card className="p-5 space-y-3">
+            <Label>توقيع المستلم (يظهر في السند)</Label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 border rounded-md bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {signature ? <img src={signature} alt="توقيع المستلم" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => signatureInput.current?.click()}>
+                  <Upload className="w-4 h-4 ml-1" />رفع صورة
+                </Button>
+                {signature && (
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setSignature(null)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              <input ref={signatureInput} type="file" accept="image/*" className="hidden" onChange={handleImageUpload(setSignature)} />
+            </div>
+            <p className="text-xs text-muted-foreground">احفظ البيانات لتطبيق التغيير على السند.</p>
           </Card>
 
           {/* Office fields */}

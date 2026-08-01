@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 
 const router = Router();
-router.use(requireOffice);
+router.use("/dashboard", requireOffice);
 
 router.get("/dashboard/stats", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;

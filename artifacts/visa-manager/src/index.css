@@ -294,13 +294,42 @@
   .no-print {
     display: none !important;
   }
-  
+
   body {
     background: white;
     color: black;
   }
-  
+
   .print-only {
     display: block !important;
+  }
+
+  /* Hide the app sidebar and any chrome during print */
+  aside {
+    display: none !important;
+  }
+
+  /* Ensure the main content area prints without scroll clipping */
+  .oboor-canvas,
+  main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Statement tables print cleanly */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  table th,
+  table td {
+    border: 1px solid #000 !important;
+    color: black !important;
+  }
+
+  /* Inactive tab panels are hidden by Radix (hidden attribute); keep active one visible */
+  [role='tabpanel'] {
+    overflow: visible !important;
   }
 }
