@@ -312,6 +312,12 @@
     print-color-adjust: exact !important;
   }
 
+  /* When a printable dialog (voucher/statement) is open, print only it */
+  body:has(.voucher-print) main,
+  body:has(.voucher-print) aside {
+    display: none !important;
+  }
+
   body {
     background: white;
     color: black;

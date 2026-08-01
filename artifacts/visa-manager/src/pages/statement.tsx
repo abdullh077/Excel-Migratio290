@@ -53,8 +53,13 @@ const updateAgent = (id: any, body: any) =>
   fetch(`/api/statement/agents/${id}`, { method: "PUT", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
 const deleteAgent = (id: any) =>
   fetch(`/api/statement/agents/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
-const getAgent = (id: any) =>
-  fetch(`/api/statement/agents/${id}`, { credentials: "include" }).then(handle);
+const getAgent = (id: any, from?: string, to?: string) => {
+  const qs = new URLSearchParams();
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  const s = qs.toString();
+  return fetch(`/api/statement/agents/${id}${s ? `?${s}` : ""}`, { credentials: "include" }).then(handle);
+};
 const createPayment = (id: any, body: any) =>
   fetch(`/api/statement/agents/${id}/payments`, { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
 const deletePayment = (id: any) =>
@@ -125,6 +130,88 @@ function BalanceBadge({ balance }: { balance: number }) {
   );
 }
 
+// Ledger-style detailed statement table (كشف حساب تفصيلي بنمط دفتر الأستاذ)
+function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
+  const opening = Number(ledger.opening) || 0;
+  let run = opening;
+  const rows = (ledger.entries ?? []).map((e: any) => {
+    run += (Number(e.debit) || 0) - (Number(e.credit) || 0);
+    return { ...e, after: run };
+  });
+  const totalDebit = rows.reduce((s: number, r: any) => s + (Number(r.debit) || 0), 0);
+  const totalCredit = rows.reduce((s: number, r: any) => s + (Number(r.credit) || 0), 0);
+  const final = opening + totalDebit - totalCredit;
+  const navy = "hsl(220,40%,18%)";
+  const gold = "hsl(43,65%,52%)";
+  const money = (v: number) => (v ? nt(v) : "—");
+  const balCell = (v: number) => (
+    <span className={v > 0 ? "text-red-700 font-semibold" : v < 0 ? "text-emerald-700 font-semibold" : "font-semibold"}>
+      {nt(Math.abs(v))}{v > 0 ? " (عليه)" : v < 0 ? " (له)" : ""}
+    </span>
+  );
+  return (
+    <div className={compact ? "overflow-x-auto" : "overflow-x-auto rounded-md border-2" } style={compact ? undefined : { borderColor: navy }}>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-white whitespace-nowrap" style={{ background: navy }}>
+            {["المرجع", "نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"].map((h) => (
+              <th key={h} className="px-3 py-2 text-right font-bold border" style={{ borderColor: gold }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="whitespace-nowrap bg-[hsl(43,65%,52%)]/10">
+            <td className="px-3 py-2 border border-border">—</td>
+            <td className="px-3 py-2 border border-border font-semibold">الرصيد الافتتاحي</td>
+            <td className="px-3 py-2 border border-border">{ledger.from ? La(ledger.from) : "—"}</td>
+            <td className="px-3 py-2 border border-border">رصيد ما قبل الفترة</td>
+            <td className="px-3 py-2 border border-border">—</td>
+            <td className="px-3 py-2 border border-border">—</td>
+            <td className="px-3 py-2 border border-border">{balCell(opening)}</td>
+          </tr>
+          {rows.length ? (
+            rows.map((r: any) => (
+              <tr key={r.ref} className="whitespace-nowrap odd:bg-muted/20">
+                <td className="px-3 py-2 border border-border font-mono text-xs">{r.ref}</td>
+                <td className="px-3 py-2 border border-border">{r.kind}</td>
+                <td className="px-3 py-2 border border-border">{La(r.date)}</td>
+                <td className="px-3 py-2 border border-border whitespace-normal min-w-48">{r.description}</td>
+                <td className="px-3 py-2 border border-border">{money(Number(r.debit))}</td>
+                <td className="px-3 py-2 border border-border">{money(Number(r.credit))}</td>
+                <td className="px-3 py-2 border border-border">{balCell(r.after)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground border border-border">
+                لا توجد حركات خلال هذه الفترة
+              </td>
+            </tr>
+          )}
+          <tr className="whitespace-nowrap font-bold" style={{ background: "hsl(43,65%,52%,0.25)" }}>
+            <td colSpan={4} className="px-3 py-2 border text-right" style={{ borderColor: navy }}>الإجمالي</td>
+            <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalDebit)}</td>
+            <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalCredit)}</td>
+            <td className="px-3 py-2 border" style={{ borderColor: navy }}>
+              <span className={`inline-block rounded px-3 py-0.5 text-white ${final > 0 ? "bg-red-700" : final < 0 ? "bg-emerald-700" : "bg-slate-600"}`}>
+                {final > 0 ? "مدين" : final < 0 ? "دائن" : "مسدَّد"}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="px-3 py-2 text-center font-semibold border-t" style={{ borderColor: navy }}>
+        {final > 0
+          ? `عليكم مبلغ ${nt(final)}`
+          : final < 0
+            ? `لكم مبلغ ${nt(-final)}`
+            : "الرصيد مسدَّد بالكامل — لا مستحقات"}
+        {" "}— العملة: ريال سعودي
+      </div>
+    </div>
+  );
+}
+
 function EmptyRow({
   colSpan,
   icon: Icon,
@@ -184,13 +271,16 @@ export default function StatementPage() {
   const [vDate, setVDate] = useState(todayISO());
   const [vAgent, setVAgent] = useState<string>("");
   const [printVoucher, setPrintVoucher] = useState<any>(null);
+  const [stmtFrom, setStmtFrom] = useState("");
+  const [stmtTo, setStmtTo] = useState("");
+  const [printStatement, setPrintStatement] = useState(false);
 
   const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
   const { data: ledger, isLoading: ledgerLoading } = useQuery({ queryKey: LEDGER_KEY, queryFn: listLedger });
   const { data: summary, isLoading: summaryLoading } = useQuery({ queryKey: SUMMARY_KEY, queryFn: getSummary });
   const { data: detail, isLoading: detailLoading } = useQuery({
-    queryKey: ["statement-agent", selected],
-    queryFn: () => getAgent(selected),
+    queryKey: ["statement-agent", selected, stmtFrom, stmtTo],
+    queryFn: () => getAgent(selected, stmtFrom, stmtTo),
     enabled: selected != null,
   });
   const { data: clients, isLoading: clientsLoading } = useQuery({ queryKey: CLIENTS_KEY, queryFn: listClients });
@@ -860,6 +950,8 @@ export default function StatementPage() {
               setSelected(null);
               setPayAmount("");
               setPayNotes("");
+              setStmtFrom("");
+              setStmtTo("");
             }
           }}
         >
@@ -1009,8 +1101,103 @@ export default function StatementPage() {
                     </Table>
                   </div>
                 </div>
+
+                {/* Detailed ledger statement (كشف حساب تفصيلي) */}
+                <div className="rounded-xl border-2 border-[hsl(43,65%,52%)]/60 overflow-hidden">
+                  <div className="bg-[hsl(220,40%,18%)] text-white px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+                    <p className="font-bold flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
+                    </p>
+                    <Button
+                      size="sm"
+                      className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                      onClick={() => setPrintStatement(true)}
+                    >
+                      <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                    </Button>
+                  </div>
+                  <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
+                    <div>
+                      <p className="text-xs mb-1 font-medium">من تاريخ</p>
+                      <Input type="date" className="h-9 w-40" value={stmtFrom} onChange={(e) => setStmtFrom(e.target.value)} />
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1 font-medium">إلى تاريخ</p>
+                      <Input type="date" className="h-9 w-40" value={stmtTo} onChange={(e) => setStmtTo(e.target.value)} />
+                    </div>
+                    {(stmtFrom || stmtTo) && (
+                      <Button variant="ghost" size="sm" onClick={() => { setStmtFrom(""); setStmtTo(""); }}>
+                        عرض كل الفترات
+                      </Button>
+                    )}
+                  </div>
+                  {detail.ledger && (
+                    <LedgerTable ledger={detail.ledger} compact />
+                  )}
+                </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Print agent statement dialog */}
+        <Dialog open={printStatement} onOpenChange={(o) => { if (!o) setPrintStatement(false); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+            <DialogHeader className="no-print">
+              <DialogTitle>كشف حساب تفصيلي — {detail?.agent?.name ?? ""}</DialogTitle>
+            </DialogHeader>
+            {detail?.ledger && (
+              <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
+                <PrintWatermark logo={office?.officeLogo} />
+                <div className="relative space-y-4">
+                  <PrintHeader
+                    office={office}
+                    details={[
+                      { label: "التاريخ", value: La(todayISO()) },
+                      { label: "العملة", value: "ريال سعودي" },
+                    ]}
+                  />
+                  {/* Statement title band */}
+                  <div className="flex items-stretch gap-2">
+                    <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
+                      كشف حساب تفصيلي للوكيل: <span className="text-[hsl(43,70%,65%)]">{detail.agent.name}</span>
+                    </div>
+                    <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
+                      {stmtFrom || stmtTo
+                        ? `خلال الفترة من ${stmtFrom ? La(stmtFrom) : "البداية"} إلى ${stmtTo ? La(stmtTo) : "اليوم"}`
+                        : "عن كامل الفترة حتى تاريخه"}
+                    </div>
+                  </div>
+                  <LedgerTable ledger={detail.ledger} />
+                  {/* Signature & stamp */}
+                  <div className="flex justify-between pt-4 text-sm">
+                    <div className="text-center">
+                      <p className="text-[hsl(220,40%,18%)] font-medium">توقيع الوكيل</p>
+                      <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                        {office?.signatureImage && (
+                          <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
+                        )}
+                        {office?.stampImage && (
+                          <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
+                        )}
+                      </div>
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2 no-print">
+              <Button variant="outline" onClick={() => setPrintStatement(false)}>
+                إغلاق
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
