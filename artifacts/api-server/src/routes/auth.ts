@@ -5,6 +5,8 @@ import { eq } from "drizzle-orm";
 import { LoginBody } from "@workspace/api-zod";
 import { officeIdOf, normaliseRole } from "../lib/auth.js";
 import { logger } from "../lib/logger.js";
+import { maybeDailyBackup } from "../lib/backup.js";
+import { addMonthsClamped } from "../lib/dates.js";
 
 const router = Router();
 
@@ -38,11 +40,27 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // Owner-controlled lock on sub accounts
+  if (user.disabled) {
+    res.status(403).json({ error: "تم إيقاف هذا الحساب من قبل مدير المكتب" });
+    return;
+  }
+
   // Reset failed attempts
   await db.update(usersTable).set({ failedAttempts: 0, lockedUntil: null }).where(eq(usersTable.id, user.id));
 
   const role = normaliseRole(user.role);
   const officeId = officeIdOf({ ...user, role });
+
+  // First login of an owner with a purchased-but-not-started subscription:
+  // start the countdown NOW (pendingMonths → expiresAt) and sync sub accounts.
+  if (role === "owner" && user.pendingMonths != null && user.expiresAt == null) {
+    const expiry = addMonthsClamped(new Date(), user.pendingMonths);
+    await db.update(usersTable).set({ expiresAt: expiry, pendingMonths: null }).where(eq(usersTable.id, user.id));
+    await db.update(usersTable).set({ expiresAt: expiry }).where(eq(usersTable.parentUserId, user.id));
+    user.expiresAt = expiry;
+    user.pendingMonths = null;
+  }
 
   // Check expiry for non-provider
   if (role !== "provider") {
@@ -51,6 +69,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       : [user];
     if (owner?.expiresAt && owner.expiresAt < new Date()) {
       res.status(403).json({ error: "انتهت صلاحية الاشتراك" });
+      return;
+    }
+    // Sub trying to log in while the owner's subscription hasn't started yet
+    // (owner never logged in): block — the owner must activate first.
+    if (role !== "owner" && owner && owner.pendingMonths != null && owner.expiresAt == null) {
+      res.status(403).json({ error: "لم يُفعَّل اشتراك المكتب بعد — يجب أن يسجل الحساب الرئيسي دخوله أولاً" });
       return;
     }
   }
@@ -66,6 +90,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     req.session.role = role;
     req.session.save(() => {
       res.json({ id: user.id, username: user.username, role, officeId, expiresAt: user.expiresAt ?? null });
+      // Lazy daily backup — fire and forget, never blocks the login response.
+      void maybeDailyBackup();
     });
   });
 });
@@ -84,6 +110,13 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId));
   if (!user) {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  if (user.disabled) {
+    // Owner locked this account — kill the stale session too.
+    req.session.destroy(() => {
+      res.status(403).json({ error: "تم إيقاف هذا الحساب من قبل مدير المكتب" });
+    });
     return;
   }
   const role = normaliseRole(user.role);

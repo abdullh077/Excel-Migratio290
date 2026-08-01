@@ -403,7 +403,7 @@ export default function VisasPage() {
             <DialogHeader>
               <DialogTitle>{editing ? "تعديل التأشيرة" : "إضافة تأشيرة جديدة"}</DialogTitle>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-2 max-h-[70vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-4 py-2 overflow-visible">
               <Field label="اسم العميل" required value={form.clientName} onChange={(v) => setForm((f: any) => ({ ...f, clientName: v }))} error={errors.clientName} />
               <Field label="رقم الجواز" required ltr value={form.passportNumber} onChange={(v) => setForm((f: any) => ({ ...f, passportNumber: v }))} error={errors.passportNumber} />
               <Field label="رقم الطلب" required ltr value={form.requestNumber} onChange={(v) => setForm((f: any) => ({ ...f, requestNumber: v }))} error={errors.requestNumber} />

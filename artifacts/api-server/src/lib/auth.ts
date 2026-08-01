@@ -49,6 +49,24 @@ export async function requireOffice(req: Request, res: Response, next: NextFunct
       res.status(403).json({ error: "Account expired" });
       return;
     }
+    // Owner subscription not yet activated (pending first owner login):
+    // block sub sessions from operating before the countdown starts.
+    if (req.session.userId !== officeId && owner.pendingMonths != null && owner.expiresAt == null) {
+      res.status(403).json({ error: "لم يُفعَّل اشتراك المكتب بعد — يجب أن يسجل الحساب الرئيسي دخوله أولاً" });
+      return;
+    }
+    // Sub account locked by the owner — block even active sessions.
+    if (req.session.userId !== officeId) {
+      const [self] = await db.select({ disabled: usersTable.disabled }).from(usersTable).where(eq(usersTable.id, req.session.userId!));
+      if (!self) {
+        res.status(401).json({ error: "Account not found" });
+        return;
+      }
+      if (self.disabled) {
+        res.status(403).json({ error: "تم إيقاف هذا الحساب من قبل مدير المكتب" });
+        return;
+      }
+    }
   }
   next();
 }

@@ -23,3 +23,5 @@ The product (visa-manager) is distributed as an **offline Windows .exe** (the ex
 **Feature set A-E requested on top:** A subscription/license countdown (days/hrs/mins) in Settings; B in-app expiry warning; C Umrah "entered Kingdom" button starting a 90-day countdown (last 10 days red, then overstay red + alert) via a NEW separate button; D wa.me WhatsApp for all clients; E new visa types علاج/سياحة/دراسية (visa_type is free-text, no schema change).
 
 **Dev/test note:** The .exe can't run in Replit — build & verify in the web stack (visa-manager + api-server on Postgres/Drizzle) in preview, then mirror backend logic into `artifacts/desktop/server` (SQLite). The desktop build predates the license/branding/entryDate/sendStatus work, so its routes + schema must be synced before shipping. Never store real credentials in memory; reset dev passwords via SQL when testing.
+
+- Subscription policy: month-based subscriptions do NOT start at account creation — pending_months converts to expiresAt at the owner's FIRST login; subs are blocked until then; explicit expiry date set by provider supersedes/clears pending months.

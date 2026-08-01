@@ -198,7 +198,13 @@ export default function ProviderPage() {
                         <td className="py-2 font-medium" dir="ltr">{a.username}</td>
                         <td className="py-2">{a.officeName ?? "—"}</td>
                         <td className="py-2 text-xs">{formatDate(a.createdAt)}</td>
-                        <td className="py-2 text-xs">{a.expiresAt ? formatDate(a.expiresAt) : <span className="text-green-600">غير محدود</span>}</td>
+                        <td className="py-2 text-xs">
+                          {a.expiresAt
+                            ? formatDate(a.expiresAt)
+                            : a.pendingMonths
+                              ? <span className="text-blue-600">يبدأ عند أول دخول ({a.pendingMonths} شهر)</span>
+                              : <span className="text-green-600">غير محدود</span>}
+                        </td>
                         <td className="py-2">
                           {isExpired(a) ? <Badge className="bg-red-100 text-red-800 text-xs">منتهي</Badge> : <Badge className="bg-green-100 text-green-800 text-xs">نشط</Badge>}
                         </td>
@@ -266,40 +272,60 @@ export default function ProviderPage() {
 
           {/* Backup */}
           <TabsContent value="backup">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-5 space-y-3">
-                <h2 className="font-semibold">النسخ الاحتياطي والاستعادة</h2>
-                <p className="text-sm text-muted-foreground">احفظ نسخة من بياناتك في مكان آمن، أو استعد نسخة سابقة عند الحاجة.</p>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => backupMut.mutate()} disabled={backupMut.isPending}>
-                    <DatabaseBackup className="w-4 h-4 ml-1" />أخذ نسخة احتياطية
-                  </Button>
-                  <Button size="sm" variant="outline">استعادة</Button>
+            <Card className="p-5 space-y-4">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <DatabaseBackup className="w-5 h-5 text-primary" /> النسخ الاحتياطي لبيانات السيرفر
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  يُؤخذ تلقائياً نسخة كاملة من بيانات السيرفر مرة واحدة كل يوم (عند أول تسجيل دخول)،
+                  وتُحفظ داخل قاعدة البيانات المركزية. تُحتفظ آخر 30 نسخة.
+                  كما تُحفظ نسخة من بيانات كل مكتب على جهازه تلقائياً مرة يومياً عند فتح البرنامج.
+                </p>
+              </div>
+              <Button size="sm" onClick={() => backupMut.mutate()} disabled={backupMut.isPending}>
+                <DatabaseBackup className="w-4 h-4 ml-1" />
+                {backupMut.isPending ? "جارٍ الحفظ..." : "إنشاء نسخة احتياطية الآن"}
+              </Button>
+              {backups.length === 0 ? (
+                <p className="text-xs text-muted-foreground">لا توجد نسخ بعد — ستُنشأ أول نسخة تلقائياً عند أول تسجيل دخول اليوم.</p>
+              ) : (
+                <div className="border rounded-md overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-muted-foreground text-xs">
+                      <tr>
+                        <th className="px-3 py-2 text-right font-medium">التاريخ</th>
+                        <th className="px-3 py-2 text-right font-medium">النوع</th>
+                        <th className="px-3 py-2 text-right font-medium">الحجم</th>
+                        <th className="px-3 py-2 text-left font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {backups.map((b: { id: number; name: string; kind?: string; size?: number; createdAt?: string }) => (
+                        <tr key={b.id}>
+                          <td className="px-3 py-2">
+                            {b.createdAt
+                              ? new Date(b.createdAt).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {b.kind === "auto" ? "تلقائية (يومية)" : "يدوية"}
+                          </td>
+                          <td className="px-3 py-2 text-xs" dir="ltr">
+                            {b.size ? `${(b.size / 1024).toFixed(0)} KB` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-left">
+                            <a href={`/api/provider/backups/${b.id}`} download className="text-primary inline-flex items-center gap-1 text-xs">
+                              <Download className="w-3.5 h-3.5" />تنزيل إلى الجهاز
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {backups.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">لا توجد نسخ بعد — ستُنشأ أول نسخة تلقائياً.</p>
-                ) : (
-                  <ul className="divide-y border rounded-md">
-                    {backups.map((b: { name: string; size?: number; createdAt?: string }) => (
-                      <li key={b.name} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <span dir="ltr" className="truncate">{b.name}</span>
-                        <a href={`/api/provider/backups/${encodeURIComponent(b.name)}`} download className="text-primary inline-flex items-center gap-1 text-xs">
-                          <Download className="w-3.5 h-3.5" />تحميل
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              <Card className="p-5 space-y-3">
-                <h2 className="font-semibold">النسخ الاحتياطي</h2>
-                <p className="text-sm text-muted-foreground">نسخة تلقائية تُحفظ يومياً عند أول دخول لك، وتقدر تنشئ نسخة الآن أو تحمّل أي نسخة سابقة.</p>
-                <Button size="sm" onClick={() => backupMut.mutate()} disabled={backupMut.isPending}>
-                  <DatabaseBackup className="w-4 h-4 ml-1" />نسخة احتياطية الآن
-                </Button>
-              </Card>
-            </div>
+              )}
+            </Card>
           </TabsContent>
         </Tabs>
 

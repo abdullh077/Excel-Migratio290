@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
 
 // Exact currency formatter as production `nt`
 function nt(e: number | null | undefined): string {
@@ -376,11 +377,10 @@ export default function StatementPage() {
           </div>
         </div>
 
-        {/* Print-only statement header */}
-        <div className="hidden print:block text-center mb-4 border-b border-black pb-3">
-          <p className="text-xl font-bold">{office?.officeName || "المكتب"}</p>
-          <p className="text-lg font-semibold mt-1">كشف الحساب</p>
-          <p className="text-sm mt-1">{La(todayISO())}</p>
+        {/* Print-only statement header — unified office header */}
+        <div className="hidden print:block mb-4">
+          <PrintHeader office={office} details={[{ label: "التاريخ", value: La(todayISO()) }]} />
+          <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">كشف الحساب</p>
         </div>
 
         <Tabs defaultValue="agents" dir="rtl">
@@ -1203,31 +1203,16 @@ export default function StatementPage() {
             {printVoucher && (
               <div className="voucher-print relative overflow-hidden space-y-5 p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white">
                 {/* Watermark — office logo */}
-                {office?.officeLogo && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
-                    <img src={office.officeLogo} alt="" className="w-[65%] max-w-[320px] opacity-[0.06] object-contain" />
-                  </div>
-                )}
+                <PrintWatermark logo={office?.officeLogo} />
                 <div className="relative space-y-5">
-                {/* Office header — like the regular receipt */}
-                <div className="flex items-start justify-between border-b-2 border-[hsl(43,65%,52%)] pb-3">
-                  <div className="flex items-center gap-3">
-                    {office?.officeLogo && (
-                      <img src={office.officeLogo} alt="شعار المكتب" className="h-14 w-14 object-contain" />
-                    )}
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-[hsl(220,40%,18%)]">{office?.officeName || "المكتب"}</p>
-                      <p className="text-xs text-gray-500">للنقل والسفريات والسياحة</p>
-                      {office?.officePhone && (
-                        <p className="text-xs text-gray-500" dir="ltr">{office.officePhone}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-left text-xs text-gray-600">
-                    <p>رقم السند: {printVoucher.id}</p>
-                    <p className="mt-1">التاريخ: {La(printVoucher.voucherDate)}</p>
-                  </div>
-                </div>
+                {/* Office header — unified across all printable documents */}
+                <PrintHeader
+                  office={office}
+                  details={[
+                    { label: "رقم السند", value: String(printVoucher.id) },
+                    { label: "التاريخ", value: La(printVoucher.voucherDate) },
+                  ]}
+                />
 
                 <div className="text-center">
                   <p className="inline-block rounded-md bg-[hsl(220,40%,18%)] text-white px-6 py-1.5 text-lg font-bold border-2 border-[hsl(43,65%,52%)]">

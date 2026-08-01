@@ -8,6 +8,7 @@ import settingsRouter, { publicSettingsRouter } from "./settings.js";
 import providerRouter from "./provider.js";
 import statementRouter from "./statement.js";
 import vouchersRouter from "./vouchers.js";
+import subsRouter from "./subs.js";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use(settingsRouter);
 router.use(providerRouter);
 router.use(statementRouter);
 router.use(vouchersRouter);
+router.use(subsRouter);
 
 export default router;

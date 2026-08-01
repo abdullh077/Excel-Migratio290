@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, X } from "lucide-react";
+import { useGetMe } from "@/hooks/useAuth";
+import { Upload, X, UserCog, Loader2, Lock, KeyRound, Pencil } from "lucide-react";
 
 const OFFICE_KEY = ["/api/settings/office"];
 
@@ -62,7 +64,6 @@ export default function OfficePage() {
   const [logo, setLogo] = useState<string | null>(null);
   const [stamp, setStamp] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
-  const [firstRunOpen, setFirstRunOpen] = useState(false);
   const logoInput = useRef<HTMLInputElement>(null);
   const stampInput = useRef<HTMLInputElement>(null);
   const signatureInput = useRef<HTMLInputElement>(null);
@@ -81,7 +82,6 @@ export default function OfficePage() {
       setLogo(settings.officeLogo ?? null);
       setStamp(settings.stampImage ?? null);
       setSignature(settings.signatureImage ?? null);
-      if (settings.configured === false) setFirstRunOpen(true);
     }
   }, [settings]);
 
@@ -102,7 +102,6 @@ export default function OfficePage() {
       qc.invalidateQueries({ queryKey: OFFICE_KEY });
       if (logo) localStorage.setItem("oboor-last-logo", logo);
       else localStorage.removeItem("oboor-last-logo");
-      setFirstRunOpen(false);
       toast({ title: "تم حفظ بيانات المكتب" });
     },
   });
@@ -286,41 +285,198 @@ export default function OfficePage() {
         <div className="flex justify-end gap-2 mt-6">
           <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>حفظ</Button>
         </div>
+
+        <SubAccountsSection />
       </div>
 
-      {/* First-run dialog */}
-      <Dialog open={firstRunOpen} onOpenChange={setFirstRunOpen}>
-        <DialogContent dir="rtl">
+    </AppLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-account management (owner only): lock/unlock, change username/password.
+// ---------------------------------------------------------------------------
+function SubAccountsSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+
+  const { data: subs, isLoading } = useQuery({
+    queryKey: ["office-subs"],
+    queryFn: async () => {
+      const res = await fetch("/api/office/subs", { credentials: "include" });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    },
+    enabled: me?.role === "owner" || me?.role === "provider",
+  });
+
+  const [credTarget, setCredTarget] = useState<any>(null);
+  const [credMode, setCredMode] = useState<"username" | "password">("username");
+  const [credValue, setCredValue] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const patch = async (url: string, body: any) => {
+    const res = await fetch(url, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const t = await res.json().catch(() => ({}));
+      throw new Error(t?.error || "حدث خطأ");
+    }
+    return res.json();
+  };
+
+  const lockMut = useMutation({
+    mutationFn: ({ id, disabled }: { id: number; disabled: boolean }) =>
+      patch(`/api/office/subs/${id}/lock`, { disabled }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["office-subs"] });
+      toast({ title: v.disabled ? "تم إيقاف الحساب الفرعي — لن يستطيع الدخول أو العمل" : "تم تفعيل الحساب الفرعي" });
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "خطأ", description: e.message }),
+  });
+
+  const credMut = useMutation({
+    mutationFn: () =>
+      credMode === "username"
+        ? patch(`/api/office/subs/${credTarget.id}/username`, { username: credValue.trim() })
+        : patch(`/api/office/subs/${credTarget.id}/password`, { password: credValue }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["office-subs"] });
+      setCredTarget(null);
+      setConfirmOpen(false);
+      setCredValue("");
+      toast({ title: credMode === "username" ? "تم تغيير اسم المستخدم" : "تم تغيير كلمة المرور" });
+    },
+    onError: (e: any) => {
+      setConfirmOpen(false);
+      toast({ variant: "destructive", title: "خطأ", description: e.message });
+    },
+  });
+
+  if (me?.role !== "owner" && me?.role !== "provider") return null;
+
+  const fmtDate = (s: string | null) =>
+    s ? new Date(s).toLocaleDateString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric" }) : null;
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center gap-2">
+        <UserCog className="w-5 h-5 text-primary" />
+        <div>
+          <h2 className="text-lg font-bold">التحكم بالحسابات الفرعية</h2>
+          <p className="text-sm text-muted-foreground">إيقاف الحساب الفرعي أو تغيير بيانات دخوله.</p>
+        </div>
+      </div>
+      <Card className="p-5">
+        {isLoading ? (
+          <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" /></div>
+        ) : !subs?.length ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">لا توجد حسابات فرعية لهذا المكتب.</p>
+        ) : (
+          <div className="space-y-3">
+            {subs.map((s: any) => (
+              <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                <div>
+                  <p className="font-medium flex items-center gap-2">
+                    {s.username}
+                    {s.disabled && (
+                      <span className="text-xs rounded-full bg-destructive/10 text-destructive px-2 py-0.5 inline-flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> موقوف
+                      </span>
+                    )}
+                  </p>
+                  {s.credentialsChangedAt && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      آخر تغيير لبيانات الدخول: {fmtDate(s.credentialsChangedAt)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{s.disabled ? "موقوف" : "نشط"}</span>
+                    <Switch
+                      dir="ltr"
+                      checked={!s.disabled}
+                      disabled={lockMut.isPending}
+                      onCheckedChange={(on) => lockMut.mutate({ id: s.id, disabled: !on })}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setCredTarget(s); setCredMode("username"); setCredValue(s.username); }}
+                  >
+                    <Pencil className="w-3.5 h-3.5 ml-1" /> اسم المستخدم
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setCredTarget(s); setCredMode("password"); setCredValue(""); }}
+                  >
+                    <KeyRound className="w-3.5 h-3.5 ml-1" /> كلمة المرور
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Change credentials dialog */}
+      <Dialog open={credTarget != null && !confirmOpen} onOpenChange={(o) => { if (!o) setCredTarget(null); }}>
+        <DialogContent dir="rtl" className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>مرحباً — إعداد بيانات المكتب</DialogTitle>
-            <DialogDescription>
-              أدخل بيانات مكتبك لتظهر في السندات ورسائل واتساب. يمكنك تعديلها لاحقاً من «بيانات المكتب».
-            </DialogDescription>
+            <DialogTitle>
+              {credMode === "username" ? "تغيير اسم المستخدم" : "تغيير كلمة المرور"} — {credTarget?.username}
+            </DialogTitle>
+            <DialogDescription>سيستخدم الموظف البيانات الجديدة في تسجيل الدخول القادم.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>اسم المكتب *</Label>
-              <Input value={form.officeName} onChange={(e) => set("officeName")(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>الهاتف الأساسي</Label>
-              <Input value={form.officePhone} onChange={(e) => set("officePhone")(e.target.value)} dir="ltr" className="text-left" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>هاتف إضافي</Label>
-              <Input value={form.officePhone2} onChange={(e) => set("officePhone2")(e.target.value)} dir="ltr" className="text-left" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>العنوان</Label>
-              <Input value={form.officeAddress} onChange={(e) => set("officeAddress")(e.target.value)} />
-            </div>
+          <div className="space-y-1.5">
+            <Label>{credMode === "username" ? "اسم المستخدم الجديد" : "كلمة المرور الجديدة"}</Label>
+            <Input
+              value={credValue}
+              onChange={(e) => setCredValue(e.target.value)}
+              type={credMode === "password" ? "password" : "text"}
+              dir="ltr"
+              className="text-left"
+            />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setFirstRunOpen(false)}>إلغاء</Button>
-            <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>حفظ</Button>
-          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCredTarget(null)}>إلغاء</Button>
+            <Button
+              disabled={!credValue.trim() || (credMode === "password" && credValue.length < 4)}
+              onClick={() => setConfirmOpen(true)}
+            >
+              متابعة
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+
+      {/* Responsibility warning */}
+      <Dialog open={confirmOpen} onOpenChange={(o) => { if (!o) setConfirmOpen(false); }}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">تنبيه هام</DialogTitle>
+            <DialogDescription>
+              أنت على وشك تغيير {credMode === "username" ? "اسم المستخدم" : "كلمة المرور"} للحساب الفرعي
+              «{credTarget?.username}». هذا التغيير يتم على مسؤوليتك الخاصة، وسيفقد الموظف القدرة على الدخول
+              بالبيانات القديمة فوراً. تأكد من إبلاغه بالبيانات الجديدة.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>تراجع</Button>
+            <Button variant="destructive" disabled={credMut.isPending} onClick={() => credMut.mutate()}>
+              {credMut.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} تأكيد التغيير
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

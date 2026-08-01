@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,12 +13,19 @@ export const usersTable = pgTable("users", {
   // Account validity: NULL = unlimited (provider/owner). A past date blocks login.
   // Only meaningful on OWNER accounts; subs inherit their owner's window.
   expiresAt: timestamp("expires_at"),
+  // Subscription months purchased but not yet started: the countdown begins
+  // at the owner's FIRST login, when this is converted into expiresAt.
+  pendingMonths: integer("pending_months"),
   // Provider-only reference label ("this account belongs to office X").
   // Separate from office_settings.officeName, which the office itself manages.
   providerLabel: text("provider_label"),
   // Brute-force protection: consecutive failed logins + temporary lockout.
   failedAttempts: integer("failed_attempts").default(0).notNull(),
   lockedUntil: timestamp("locked_until"),
+  // Owner-controlled lock for SUB accounts: blocks login and active sessions.
+  disabled: boolean("disabled").default(false).notNull(),
+  // When the owner last changed this sub account's username/password.
+  credentialsChangedAt: timestamp("credentials_changed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

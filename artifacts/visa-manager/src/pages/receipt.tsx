@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Printer, FileDown, ArrowRight } from "lucide-react";
 import { fmt, formatDate } from "@/lib/utils";
+import { PrintHeader } from "@/components/print/PrintHeader";
 
 const OFFICE_FALLBACK = "مكتب اللواء الغربي";
 const SUBTITLE_FALLBACK = "للنقل والسفريات والسياحة";
@@ -98,23 +99,16 @@ export default function ReceiptPage() {
             </div>
           )}
           <div className="relative">
-          {/* Header */}
-          <div className="flex items-start justify-between border-b pb-4 mb-6">
-            {/* Office identity — right side (first in RTL) */}
-            <div className="flex items-center gap-3">
-              {officeLogo && <img src={officeLogo} alt="شعار المكتب" className="h-16 w-16 object-contain" />}
-              <div className="text-right">
-                <h1 className="text-lg font-bold text-primary print:text-base">{officeName}</h1>
-                <p className="text-xs text-gray-500">{SUBTITLE_FALLBACK}</p>
-              </div>
-            </div>
-            {/* Date / receipt number — far left column (last in RTL) */}
-            <div className="text-left">
-              <p className="text-xs text-gray-500">التاريخ: {formatDate(record.createdAt)}</p>
-              <p className="text-xs text-gray-500 mt-1">رقم السند: {receiptId}</p>
-              <p className="text-xs text-gray-500 mt-3">للتواصل والدعم</p>
-              <p className="text-xs text-gray-500" dir="ltr">{supportPhone}</p>
-            </div>
+          {/* Header — unified across all printable documents */}
+          <div className="mb-6">
+            <PrintHeader
+              office={{ ...office, officeName, officePhone: supportPhone }}
+              fallbackName={OFFICE_FALLBACK}
+              details={[
+                { label: "رقم السند", value: receiptId },
+                { label: "التاريخ", value: formatDate(record.createdAt) },
+              ]}
+            />
           </div>
 
           {/* Title */}
@@ -173,10 +167,10 @@ export default function ReceiptPage() {
             <div className="text-center">
               <div className="flex items-end justify-center gap-2 h-24 mb-1">
                 {signatureImage && (
-                  <img src={signatureImage} alt="توقيع المكتب" className="max-h-[100px] w-auto object-contain print:max-h-[90px]" />
+                  <img src={signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
                 )}
                 {stampImage && (
-                  <img src={stampImage} alt="ختم المكتب" className="max-h-[110px] w-auto object-contain print:max-h-[100px]" />
+                  <img src={stampImage} alt="ختم المكتب" className="max-h-[70px] w-auto object-contain" />
                 )}
               </div>
               <div className="border-t pt-2 text-xs text-gray-600">توقيع المكتب</div>

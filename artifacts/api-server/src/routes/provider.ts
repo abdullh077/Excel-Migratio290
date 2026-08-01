@@ -1,15 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import path from "node:path";
-import fs from "node:fs/promises";
-import {
-  db, usersTable, officeSettingsTable,
-  umrahClientsTable, otherVisasTable, agentsTable, agentPaymentsTable,
-  ledgerEntriesTable, vouchersTable,
-} from "@workspace/db";
-import { eq, sql, or } from "drizzle-orm";
+import { db, usersTable, officeSettingsTable, backupsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
 import { requireProvider } from "../lib/auth.js";
+import { createBackup } from "../lib/backup.js";
+import { addMonthsClamped } from "../lib/dates.js";
 import {
   CreateAccountBody,
   DeleteAccountParams,
@@ -36,6 +32,7 @@ router.get("/provider/accounts", async (req, res): Promise<void> => {
       role: u.role,
       parentUserId: u.parentUserId,
       expiresAt: u.expiresAt ? u.expiresAt.toISOString() : null,
+      pendingMonths: u.pendingMonths ?? null,
       // Provider reference label takes priority; fall back to the office's own configured name.
       officeName: u.providerLabel ?? settingsMap.get(u.parentUserId ?? u.id) ?? null,
       createdAt: u.createdAt.toISOString(),
@@ -80,7 +77,8 @@ router.patch("/provider/accounts/:id/expiry", async (req, res): Promise<void> =>
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const expiresAt = (parsed.data as any).expiresAt ? new Date((parsed.data as any).expiresAt) : null;
-  const [user] = await db.update(usersTable).set({ expiresAt }).where(eq(usersTable.id, params.data.id)).returning();
+  // Explicitly setting an expiry (or unlimited) supersedes any not-yet-started pending months.
+  const [user] = await db.update(usersTable).set({ expiresAt, pendingMonths: null }).where(eq(usersTable.id, params.data.id)).returning();
   if (!user) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ id: user.id, username: user.username, role: user.role, parentUserId: user.parentUserId, expiresAt: user.expiresAt ? user.expiresAt.toISOString() : null, officeName: null, createdAt: user.createdAt.toISOString() });
 });
@@ -123,14 +121,16 @@ router.post("/provider/owners", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { username, password, expiresAt, months, officeName } = parsed.data;
   const passwordHash = await bcrypt.hash(password, 10);
-  // months takes priority: calendar-safe expiry computed server-side.
-  const expiry = months ? addMonthsClamped(new Date(), months) : expiresAt ? new Date(expiresAt) : null;
+  // Month-based subscriptions do NOT start at creation: the countdown begins
+  // at the owner's first login (pendingMonths → expiresAt in auth/login).
+  // A custom explicit date stays fixed as given.
   const [user] = await db.insert(usersTable).values({
     username,
     passwordHash,
     role: "owner",
     parentUserId: null,
-    expiresAt: expiry,
+    expiresAt: months ? null : expiresAt ? new Date(expiresAt) : null,
+    pendingMonths: months ?? null,
     providerLabel: officeName ?? null,
   }).returning();
 
@@ -164,18 +164,6 @@ router.patch("/provider/accounts/:id/office-name", async (req, res): Promise<voi
   res.json({ message: "Updated", officeName: body.data.officeName });
 });
 
-// Calendar-safe month addition: clamps to the last day of the target month
-// (e.g. Jan 31 + 1 month = Feb 28/29, not Mar 2/3).
-function addMonthsClamped(date: Date, months: number): Date {
-  const d = new Date(date);
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, lastDay));
-  return d;
-}
-
 // Subscription renewal: extend expiry by N months from max(now, current expiry).
 router.post("/provider/accounts/:id/renew", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
@@ -189,6 +177,14 @@ router.post("/provider/accounts/:id/renew", async (req, res): Promise<void> => {
   const ownerId = user.parentUserId ?? user.id;
   const [owner] = await db.select().from(usersTable).where(eq(usersTable.id, ownerId));
   if (!owner) { res.status(404).json({ error: "Owner not found" }); return; }
+
+  // Owner never logged in yet (countdown not started): add months to the pending balance.
+  if (owner.pendingMonths != null && owner.expiresAt == null) {
+    const pending = owner.pendingMonths + body.data.months;
+    await db.update(usersTable).set({ pendingMonths: pending }).where(eq(usersTable.id, ownerId));
+    res.json({ id: ownerId, expiresAt: null, pendingMonths: pending });
+    return;
+  }
 
   const now = new Date();
   const base = addMonthsClamped(owner.expiresAt && owner.expiresAt > now ? new Date(owner.expiresAt) : now, body.data.months);
@@ -243,74 +239,29 @@ router.post("/provider/subs", async (req, res): Promise<void> => {
   });
 });
 
-// --- Backups ---
-
-const BACKUPS_DIR = path.resolve(process.cwd(), "backups");
-
-async function ensureBackupsDir(): Promise<void> {
-  await fs.mkdir(BACKUPS_DIR, { recursive: true });
-}
-
-// Reject path traversal / stray separators in backup names.
-function safeBackupName(name: string): string | null {
-  if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return null;
-  if (!name.endsWith(".json")) return null;
-  return name;
-}
+// --- Backups (stored in the central database) ---
 
 router.get("/provider/backups", async (_req, res): Promise<void> => {
-  await ensureBackupsDir();
-  const entries = await fs.readdir(BACKUPS_DIR);
-  const files = entries.filter((n) => n.endsWith(".json"));
-  const result = await Promise.all(files.map(async (name) => {
-    const stat = await fs.stat(path.join(BACKUPS_DIR, name));
-    return { name, size: stat.size, createdAt: stat.mtime.toISOString() };
-  }));
-  result.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  res.json(result);
+  const rows = await db.select({
+    id: backupsTable.id, name: backupsTable.name, kind: backupsTable.kind,
+    size: backupsTable.size, createdAt: backupsTable.createdAt,
+  }).from(backupsTable).orderBy(desc(backupsTable.createdAt));
+  res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
 router.post("/provider/backup", async (_req, res): Promise<void> => {
-  await ensureBackupsDir();
-
-  const [users, settings, umrah, visas, agents, agentPayments, ledger, vouchers] = await Promise.all([
-    db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, parentUserId: usersTable.parentUserId, expiresAt: usersTable.expiresAt, createdAt: usersTable.createdAt }).from(usersTable),
-    db.select().from(officeSettingsTable),
-    db.select().from(umrahClientsTable),
-    db.select().from(otherVisasTable),
-    db.select().from(agentsTable),
-    db.select().from(agentPaymentsTable),
-    db.select().from(ledgerEntriesTable),
-    db.select().from(vouchersTable),
-  ]);
-
-  const now = new Date();
-  const stamp = now.toISOString().replace(/[:.]/g, "-");
-  const name = `backup-${stamp}.json`;
-  const payload = {
-    createdAt: now.toISOString(),
-    version: 1,
-    data: { users, settings, umrah, visas, agents, agentPayments, ledger, vouchers },
-  };
-  const json = JSON.stringify(payload, null, 2);
-  await fs.writeFile(path.join(BACKUPS_DIR, name), json, "utf8");
-
-  res.status(201).json({ name, size: Buffer.byteLength(json), createdAt: now.toISOString() });
+  const row = await createBackup("manual");
+  res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
 });
 
-router.get("/provider/backups/:name", async (req, res): Promise<void> => {
-  const name = safeBackupName(req.params.name);
-  if (!name) { res.status(400).json({ error: "Invalid name" }); return; }
-  await ensureBackupsDir();
-  const filePath = path.join(BACKUPS_DIR, name);
-  try {
-    const content = await fs.readFile(filePath, "utf8");
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
-    res.send(content);
-  } catch {
-    res.status(404).json({ error: "Not found" });
-  }
+router.get("/provider/backups/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(backupsTable).where(eq(backupsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", `attachment; filename="${row.name}"`);
+  res.send(JSON.stringify(row.data, null, 2));
 });
 
 export default router;
