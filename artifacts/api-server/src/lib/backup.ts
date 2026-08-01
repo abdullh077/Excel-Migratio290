@@ -13,6 +13,7 @@ export async function buildBackupPayload() {
       id: usersTable.id, username: usersTable.username, role: usersTable.role,
       parentUserId: usersTable.parentUserId, expiresAt: usersTable.expiresAt,
       providerLabel: usersTable.providerLabel, disabled: usersTable.disabled,
+      pendingMonths: usersTable.pendingMonths, credentialsChangedAt: usersTable.credentialsChangedAt,
       createdAt: usersTable.createdAt,
     }).from(usersTable),
     db.select().from(officeSettingsTable),
@@ -78,6 +79,99 @@ export async function maybeDailyBackup(): Promise<void> {
   }
 }
 
+// Office-scoped restore: replaces ONLY the given office's data rows.
+// Accepts either an office backup file ({version:2, officeId, data:{...}})
+// or a full server backup ({version:2, data:{...}}) from which the office's
+// slice is extracted. User accounts/passwords are never touched.
+const OFFICE_ARRAYS = ["settings", "umrah", "visas", "agents", "agentPayments", "ledger", "vouchers", "clientAccounts"] as const;
+
+// Validate an office restore payload WITHOUT touching data. Called by routes
+// before the safety backup, so failed attempts don't consume retention slots.
+export function assertOfficePayload(officeId: number, payload: any): void {
+  if (!payload || payload.version !== 2 || typeof payload.data !== "object" || payload.data === null) {
+    throw Object.assign(new Error("ملف النسخة غير صالح"), { status: 400 });
+  }
+  // Office files carry their officeId — refuse a file that belongs to another office.
+  if (payload.officeId != null && payload.officeId !== officeId) {
+    throw Object.assign(new Error("هذه النسخة تعود لمكتب آخر ولا يمكن استعادتها هنا"), { status: 403 });
+  }
+  for (const k of OFFICE_ARRAYS) {
+    if (payload.data[k] != null && !Array.isArray(payload.data[k])) {
+      throw Object.assign(new Error("ملف النسخة غير صالح"), { status: 400 });
+    }
+  }
+}
+
+export async function restoreOfficeFromPayload(officeId: number, payload: any) {
+  assertOfficePayload(officeId, payload);
+  const src = payload.data;
+  // Slice to this office only (full server backups contain every office).
+  const mine = (rows: any[] | undefined) => (rows ?? []).filter((r) => (r.userId ?? r.user_id) === officeId);
+  const data = {
+    settings: mine(src.settings),
+    umrah: mine(src.umrah),
+    visas: mine(src.visas),
+    agents: mine(src.agents),
+    agentPayments: mine(src.agentPayments),
+    ledger: mine(src.ledger),
+    vouchers: mine(src.vouchers),
+    clientAccounts: mine(src.clientAccounts),
+  };
+
+  await db.transaction(async (tx) => {
+    // Wipe this office's rows only (children before parents).
+    await tx.delete(vouchersTable).where(eq(vouchersTable.userId, officeId));
+    await tx.delete(agentPaymentsTable).where(eq(agentPaymentsTable.userId, officeId));
+    await tx.delete(agentsTable).where(eq(agentsTable.userId, officeId));
+    await tx.delete(ledgerEntriesTable).where(eq(ledgerEntriesTable.userId, officeId));
+    await tx.delete(umrahClientsTable).where(eq(umrahClientsTable.userId, officeId));
+    await tx.delete(otherVisasTable).where(eq(otherVisasTable.userId, officeId));
+    await tx.delete(clientAccountsTable).where(eq(clientAccountsTable.userId, officeId));
+    await tx.delete(officeSettingsTable).where(eq(officeSettingsTable.userId, officeId));
+
+    for (const s of data.settings) {
+      await tx.insert(officeSettingsTable).values({ ...s, userId: officeId, updatedAt: d(s.updatedAt) ?? new Date() });
+    }
+    for (const r of data.umrah) {
+      await tx.insert(umrahClientsTable).values({ ...r, userId: officeId, entryDate: d(r.entryDate), createdAt: d(r.createdAt) ?? new Date() });
+    }
+    for (const r of data.visas) {
+      await tx.insert(otherVisasTable).values({ ...r, userId: officeId, createdAt: d(r.createdAt) ?? new Date() });
+    }
+    for (const r of data.agents) {
+      await tx.insert(agentsTable).values({ ...r, userId: officeId, createdAt: d(r.createdAt) ?? new Date() });
+    }
+    const agentIds = new Set(data.agents.map((a: any) => a.id));
+    const paymentRows = data.agentPayments.filter((r: any) => agentIds.has(r.agentId));
+    for (const r of paymentRows) {
+      await tx.insert(agentPaymentsTable).values({ ...r, userId: officeId, paidAt: d(r.paidAt) ?? new Date(), createdAt: d(r.createdAt) ?? new Date() });
+    }
+    const paymentIds = new Set(paymentRows.map((r: any) => r.id));
+    for (const r of data.ledger) {
+      await tx.insert(ledgerEntriesTable).values({ ...r, userId: officeId, entryDate: d(r.entryDate) ?? new Date(), createdAt: d(r.createdAt) ?? new Date() });
+    }
+    for (const r of data.vouchers) {
+      await tx.insert(vouchersTable).values({
+        ...r,
+        userId: officeId,
+        agentPaymentId: r.agentPaymentId != null && paymentIds.has(r.agentPaymentId) ? r.agentPaymentId : null,
+        voucherDate: d(r.voucherDate) ?? new Date(),
+        createdAt: d(r.createdAt) ?? new Date(),
+      });
+    }
+    for (const r of data.clientAccounts) {
+      await tx.insert(clientAccountsTable).values({ ...r, userId: officeId, createdAt: d(r.createdAt) ?? new Date() });
+    }
+
+    // Resync serial sequences after explicit-id inserts.
+    for (const t of ["umrah_clients", "other_visas", "agents", "agent_payments", "ledger_entries", "vouchers", "client_accounts"]) {
+      await tx.execute(sql.raw(
+        `SELECT setval(pg_get_serial_sequence('${t}', 'id'), COALESCE((SELECT MAX(id) FROM ${t}), 0) + 1, false)`
+      ));
+    }
+  });
+}
+
 export async function restoreFromBackupPayload(payload: any, requesterId: number) {
   if (!payload || payload.version !== 2 || typeof payload.data !== "object" || payload.data === null) {
     throw Object.assign(new Error("Invalid backup payload"), { status: 400 });
@@ -111,6 +205,8 @@ export async function restoreFromBackupPayload(payload: any, requesterId: number
           expiresAt: d(u.expiresAt),
           providerLabel: u.providerLabel ?? null,
           disabled: !!u.disabled,
+          pendingMonths: u.pendingMonths ?? null,
+          credentialsChangedAt: d(u.credentialsChangedAt),
         }).where(eq(usersTable.id, u.id));
       } else {
         // Unusable random hash — never matches any password; provider resets it.
@@ -124,6 +220,8 @@ export async function restoreFromBackupPayload(payload: any, requesterId: number
           expiresAt: d(u.expiresAt),
           providerLabel: u.providerLabel ?? null,
           disabled: !!u.disabled,
+          pendingMonths: u.pendingMonths ?? null,
+          credentialsChangedAt: d(u.credentialsChangedAt),
           createdAt: d(u.createdAt) ?? new Date(),
         });
       }

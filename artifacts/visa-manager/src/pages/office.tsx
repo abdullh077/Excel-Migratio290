@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayout, downloadOfficeBackup } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/useAuth";
-import { Upload, X, UserCog, Loader2, Lock, KeyRound, Pencil } from "lucide-react";
+import { Upload, X, UserCog, Loader2, Lock, KeyRound, Pencil, DatabaseBackup, Download } from "lucide-react";
 
 const OFFICE_KEY = ["/api/settings/office"];
 
@@ -287,9 +287,144 @@ export default function OfficePage() {
         </div>
 
         <SubAccountsSection />
+        <BackupRestoreSection />
       </div>
 
     </AppLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Office backup & restore (owner only): save a copy to this device, and
+// restore the office's data from a server snapshot or an uploaded file.
+// ---------------------------------------------------------------------------
+function BackupRestoreSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Strictly owner: providers restore from their own admin page.
+  const isOwner = me?.role === "owner";
+
+  const { data: serverBackups = [] } = useQuery({
+    queryKey: ["office-backups"],
+    queryFn: async () => {
+      const res = await fetch("/api/office/backups", { credentials: "include" });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    },
+    enabled: isOwner,
+  });
+
+  // Pending restore action awaiting confirmation
+  const [confirm, setConfirm] = useState<null | { kind: "server"; id: number; label: string } | { kind: "file"; payload: any; label: string }>(null);
+
+  const restoreMut = useMutation({
+    mutationFn: async () => {
+      if (!confirm) return;
+      const res = confirm.kind === "server"
+        ? await fetch(`/api/office/backups/${confirm.id}/restore`, { method: "POST", credentials: "include" })
+        : await fetch("/api/office/restore-upload", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ payload: confirm.payload }),
+          });
+      if (!res.ok) {
+        const t = await res.json().catch(() => ({}));
+        throw new Error(t?.error || "تعذّرت الاستعادة");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setConfirm(null);
+      qc.clear();
+      toast({ title: "تمت استعادة البيانات بنجاح" });
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "تعذّرت الاستعادة", description: e.message }),
+  });
+
+  if (!isOwner) return null;
+
+  const fmtDT = (s: string) =>
+    new Date(s).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const onFile = async (f: File | undefined) => {
+    if (!f) return;
+    try {
+      const payload = JSON.parse(await f.text());
+      setConfirm({ kind: "file", payload, label: `الملف «${f.name}»` });
+    } catch {
+      toast({ variant: "destructive", title: "الملف غير صالح", description: "اختر ملف نسخة احتياطية بصيغة JSON" });
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center gap-2">
+        <DatabaseBackup className="w-5 h-5 text-primary" />
+        <div>
+          <h2 className="text-lg font-bold">النسخ الاحتياطي والاستعادة</h2>
+          <p className="text-sm text-muted-foreground">
+            تُحفظ نسخة من بيانات مكتبك على جهازك تلقائياً مرة يومياً وعند كل تسجيل خروج، ويمكنك استعادة بياناتك في أي وقت.
+          </p>
+        </div>
+      </div>
+      <Card className="p-5 space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => downloadOfficeBackup().catch(() => toast({ variant: "destructive", title: "تعذّر حفظ النسخة" }))}>
+            <Download className="w-4 h-4 ml-1" /> حفظ نسخة على جهازي الآن
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+            <Upload className="w-4 h-4 ml-1" /> استعادة من ملف على جهازي
+          </Button>
+          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">أو الاستعادة من نسخة محفوظة في السيرفر:</p>
+          {serverBackups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">لا توجد نسخ محفوظة في السيرفر بعد.</p>
+          ) : (
+            <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
+              {serverBackups.map((b: { id: number; kind: string; createdAt: string }) => (
+                <div key={b.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span>
+                    {fmtDT(b.createdAt)}
+                    <span className="text-xs text-muted-foreground mr-2">({b.kind === "auto" ? "تلقائية" : "يدوية"})</span>
+                  </span>
+                  <Button size="sm" variant="outline" onClick={() => setConfirm({ kind: "server", id: b.id, label: `نسخة السيرفر بتاريخ ${fmtDT(b.createdAt)}` })}>
+                    استعادة
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Strong confirmation */}
+      <Dialog open={confirm != null} onOpenChange={(o) => { if (!o) setConfirm(null); }}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">تأكيد استعادة البيانات</DialogTitle>
+            <DialogDescription>
+              سيتم <b>حذف بيانات مكتبك الحالية بالكامل</b> (المعتمرون، التأشيرات، الوكلاء، السندات، الحسابات)
+              واستبدالها ببيانات {confirm?.label}. تُؤخذ نسخة أمان تلقائياً قبل الاستعادة، لكن هذا الإجراء
+              لا يمكن التراجع عنه مباشرة. هل أنت متأكد؟
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirm(null)}>تراجع</Button>
+            <Button variant="destructive" disabled={restoreMut.isPending} onClick={() => restoreMut.mutate()}>
+              {restoreMut.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} نعم، استعد البيانات
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

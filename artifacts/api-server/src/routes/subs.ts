@@ -6,8 +6,10 @@ import {
   umrahClientsTable, otherVisasTable, agentsTable, agentPaymentsTable,
   ledgerEntriesTable, vouchersTable, clientAccountsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { requireOwner } from "../lib/auth.js";
+import { restoreOfficeFromPayload, assertOfficePayload, createBackup } from "../lib/backup.js";
+import { backupsTable } from "@workspace/db";
 
 // Owner-facing management of the office's own sub accounts + office backup.
 const router = Router();
@@ -95,6 +97,57 @@ router.get("/office/backup", async (req, res): Promise<void> => {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.send(JSON.stringify(payload, null, 2));
+});
+
+// List server snapshots (metadata only) the owner can restore his office's data from.
+router.get("/office/backups", async (_req, res): Promise<void> => {
+  const rows = await db.select({
+    id: backupsTable.id, kind: backupsTable.kind, createdAt: backupsTable.createdAt,
+  }).from(backupsTable).orderBy(desc(backupsTable.createdAt));
+  res.json(rows.map((r) => ({ id: r.id, kind: r.kind, createdAt: r.createdAt.toISOString() })));
+});
+
+// Restore endpoints are strictly for office owners — providers have their own
+// global restore under /provider/*.
+function requireStrictOwner(req: any, res: any): boolean {
+  if (req.session.role !== "owner") {
+    res.status(403).json({ error: "هذه العملية متاحة لمدير المكتب فقط" });
+    return false;
+  }
+  return true;
+}
+
+// Restore THIS office's data from a stored server snapshot.
+// Payload is validated BEFORE the safety snapshot, then only this office's rows change.
+router.post("/office/backups/:id/restore", async (req, res): Promise<void> => {
+  if (!requireStrictOwner(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(backupsTable).where(eq(backupsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  try {
+    assertOfficePayload(req.session.officeId!, row.data);
+    const safety = await createBackup("manual");
+    await restoreOfficeFromPayload(req.session.officeId!, row.data);
+    res.json({ message: "Restored", safetyBackupId: safety.id });
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.message ?? "تعذّرت الاستعادة" });
+  }
+});
+
+// Restore THIS office's data from an uploaded backup file
+// (either an office file saved on the device, or a full server file).
+router.post("/office/restore-upload", async (req, res): Promise<void> => {
+  if (!requireStrictOwner(req, res)) return;
+  const payload = req.body?.payload ?? req.body;
+  try {
+    assertOfficePayload(req.session.officeId!, payload);
+    const safety = await createBackup("manual");
+    await restoreOfficeFromPayload(req.session.officeId!, payload);
+    res.json({ message: "Restored", safetyBackupId: safety.id });
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.message ?? "تعذّرت الاستعادة" });
+  }
 });
 
 export default router;

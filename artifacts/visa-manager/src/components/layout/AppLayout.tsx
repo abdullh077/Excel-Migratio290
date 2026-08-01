@@ -162,8 +162,14 @@ function Sidebar({
   const nav = buildNav(role);
 
   const logout = useMutation({
-    mutationFn: () =>
-      apiRequest("/api/auth/logout", { method: "POST" }),
+    mutationFn: async () => {
+      // Save a local copy of the office data on every exit (owner only),
+      // BEFORE the session ends.
+      if (role === "owner") {
+        try { await downloadOfficeBackup(); } catch { /* offline — skip */ }
+      }
+      return apiRequest("/api/auth/logout", { method: "POST" });
+    },
     onSuccess: async () => {
       await clearClientCaches();
       queryClient.clear();
@@ -266,6 +272,21 @@ function Sidebar({
 // --------------------------------------------------------------------------
 // Shell
 // --------------------------------------------------------------------------
+// Download the office's backup file to this device.
+export async function downloadOfficeBackup(): Promise<void> {
+  const res = await fetch("/api/office/backup", { credentials: "include" });
+  if (!res.ok) throw new Error(String(res.status));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `office-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Automatic daily local copy of the office's data: once per calendar day,
 // silently download the office backup file to this device.
 function useDailyLocalBackup() {
@@ -275,24 +296,9 @@ function useDailyLocalBackup() {
     const today = new Date().toISOString().slice(0, 10);
     const key = "oboor-office-backup-date";
     if (localStorage.getItem(key) === today) return;
-    (async () => {
-      try {
-        const res = await fetch("/api/office/backup", { credentials: "include" });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `office-backup-${today}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        localStorage.setItem(key, today);
-      } catch {
-        // offline or server unavailable — try again next load
-      }
-    })();
+    downloadOfficeBackup()
+      .then(() => localStorage.setItem(key, today))
+      .catch(() => { /* offline or server unavailable — try again next load */ });
   }, [user?.role]);
 }
 
