@@ -107,6 +107,33 @@ router.get("/office/backups", async (_req, res): Promise<void> => {
   res.json(rows.map((r) => ({ id: r.id, kind: r.kind, createdAt: r.createdAt.toISOString() })));
 });
 
+// Owner changes their OWN username/password (requires current password).
+router.patch("/office/credentials", async (req, res): Promise<void> => {
+  if (!requireStrictOwner(req, res)) return;
+  const body = z.object({
+    currentPassword: z.string().min(1),
+    username: z.string().trim().min(1).optional(),
+    password: z.string().min(6, "كلمة المرور يجب ألا تقل عن 6 أحرف").optional(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.issues[0]?.message ?? body.error.message }); return; }
+  if (!body.data.username && !body.data.password) {
+    res.status(400).json({ error: "لم يتم إدخال أي تغيير" }); return;
+  }
+  const [me] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
+  if (!me) { res.status(404).json({ error: "Not found" }); return; }
+  const ok = await bcrypt.compare(body.data.currentPassword, me.passwordHash);
+  if (!ok) { res.status(403).json({ error: "كلمة المرور الحالية غير صحيحة" }); return; }
+  if (body.data.username && body.data.username !== me.username) {
+    const [exists] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, body.data.username));
+    if (exists && exists.id !== me.id) { res.status(400).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
+  }
+  const updates: Record<string, unknown> = { credentialsChangedAt: new Date() };
+  if (body.data.username) updates.username = body.data.username;
+  if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 10);
+  const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, me.id)).returning();
+  res.json({ username: updated.username, credentialsChangedAt: updated.credentialsChangedAt?.toISOString() ?? null });
+});
+
 // Restore endpoints are strictly for office owners — providers have their own
 // global restore under /provider/*.
 function requireStrictOwner(req: any, res: any): boolean {

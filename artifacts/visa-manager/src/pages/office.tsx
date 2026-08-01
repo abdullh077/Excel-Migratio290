@@ -286,11 +286,126 @@ export default function OfficePage() {
           <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>حفظ</Button>
         </div>
 
+        <MyCredentialsSection />
         <SubAccountsSection />
         <BackupRestoreSection />
       </div>
 
     </AppLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Owner changes their OWN username/password (with current-password check and
+// a strong warning dialog before applying).
+// ---------------------------------------------------------------------------
+function MyCredentialsSection() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: me } = useGetMe();
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const body: any = { currentPassword };
+      if (newUsername.trim()) body.username = newUsername.trim();
+      if (newPassword) body.password = newPassword;
+      const res = await fetch("/api/office/credentials", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "حدث خطأ");
+      return data;
+    },
+    onSuccess: () => {
+      setConfirmOpen(false);
+      setNewUsername("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setCurrentPassword("");
+      qc.invalidateQueries();
+      toast({ title: "تم تغيير بيانات الدخول", description: "استخدم البيانات الجديدة في تسجيل الدخول القادم." });
+    },
+    onError: (e: any) => toast({ title: "تعذّر التغيير", description: e.message, variant: "destructive" }),
+  });
+
+  if (me?.role !== "owner") return null;
+
+  const hasChange = !!newUsername.trim() || !!newPassword;
+  const passwordMismatch = !!newPassword && newPassword !== confirmPassword;
+  const passwordTooShort = !!newPassword && newPassword.length < 6;
+
+  return (
+    <Card className="p-5 mt-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <KeyRound className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">بيانات الدخول الخاصة بي</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        غيّر اسم المستخدم أو كلمة المرور لحسابك ({me?.username}). اترك أي حقل فارغاً إذا لا تريد تغييره.
+      </p>
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label>اسم المستخدم الجديد</Label>
+          <Input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder={me?.username ?? ""} autoComplete="off" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>كلمة المرور الجديدة</Label>
+          <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="6 أحرف على الأقل" autoComplete="new-password" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>تأكيد كلمة المرور الجديدة</Label>
+          <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+        </div>
+      </div>
+      {passwordMismatch && <p className="text-sm text-destructive">كلمتا المرور غير متطابقتين</p>}
+      {passwordTooShort && !passwordMismatch && <p className="text-sm text-destructive">كلمة المرور يجب ألا تقل عن 6 أحرف</p>}
+      <div className="flex justify-end">
+        <Button
+          disabled={!hasChange || passwordMismatch || passwordTooShort}
+          onClick={() => setConfirmOpen(true)}
+        >
+          <Pencil className="w-4 h-4 ml-1.5" /> تغيير بيانات الدخول
+        </Button>
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={(o) => { if (!o) { setConfirmOpen(false); setCurrentPassword(""); } }}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">تحذير — تغيير بيانات الدخول</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-right pt-2">
+                <p>أنت على وشك تغيير بيانات الدخول لحسابك:</p>
+                <ul className="list-disc pr-5 space-y-1 text-sm">
+                  {newUsername.trim() && <li>اسم المستخدم الجديد: <b>{newUsername.trim()}</b></li>}
+                  {newPassword && <li>سيتم تغيير كلمة المرور</li>}
+                </ul>
+                <p className="font-semibold text-destructive">
+                  احفظ البيانات الجديدة في مكان آمن — إذا نسيتها لن تستطيع الدخول إلى النظام إلا عبر مزوّد الخدمة. هذه العملية على مسؤوليتك.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>أدخل كلمة المرور الحالية للتأكيد</Label>
+            <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setConfirmOpen(false); setCurrentPassword(""); }}>إلغاء</Button>
+            <Button variant="destructive" disabled={!currentPassword || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending && <Loader2 className="w-4 h-4 ml-1.5 animate-spin" />} تأكيد التغيير
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 
