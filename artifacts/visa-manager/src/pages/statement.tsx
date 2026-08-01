@@ -71,8 +71,12 @@ const deleteLedger = (id: any) =>
   fetch(`/api/statement/ledger/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
 const getSummary = () => fetch("/api/statement/summary", { credentials: "include" }).then(handle);
 const listClients = () => fetch("/api/statement/clients", { credentials: "include" }).then(handle);
-const getClientDetails = (name: string) =>
-  fetch(`/api/statement/clients/details?name=${encodeURIComponent(name)}`, { credentials: "include" }).then(handle);
+const getClientDetails = (name: string, from?: string, to?: string) => {
+  const qs = new URLSearchParams({ name });
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  return fetch(`/api/statement/clients/details?${qs.toString()}`, { credentials: "include" }).then(handle);
+};
 const listVouchers = () => fetch("/api/vouchers", { credentials: "include" }).then(handle);
 const createVoucher = (body: any) =>
   fetch("/api/vouchers", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
@@ -261,6 +265,9 @@ export default function StatementPage() {
   const [clientDialog, setClientDialog] = useState(false);
   const [clientNameField, setClientNameField] = useState("");
   const [clientPhoneField, setClientPhoneField] = useState("");
+  const [clientStmtFrom, setClientStmtFrom] = useState("");
+  const [clientStmtTo, setClientStmtTo] = useState("");
+  const [printClientStatement, setPrintClientStatement] = useState(false);
 
   // vouchers tab
   const [voucherDialog, setVoucherDialog] = useState(false);
@@ -285,8 +292,8 @@ export default function StatementPage() {
   });
   const { data: clients, isLoading: clientsLoading } = useQuery({ queryKey: CLIENTS_KEY, queryFn: listClients });
   const { data: clientDetail, isLoading: clientDetailLoading } = useQuery({
-    queryKey: ["statement-client", selectedClient],
-    queryFn: () => getClientDetails(selectedClient!),
+    queryKey: ["statement-client", selectedClient, clientStmtFrom, clientStmtTo],
+    queryFn: () => getClientDetails(selectedClient!, clientStmtFrom, clientStmtTo),
     enabled: selectedClient != null,
   });
   const { data: vouchers, isLoading: vouchersLoading } = useQuery({ queryKey: VOUCHERS_KEY, queryFn: listVouchers });
@@ -1205,7 +1212,11 @@ export default function StatementPage() {
         <Dialog
           open={selectedClient != null}
           onOpenChange={(o) => {
-            if (!o) setSelectedClient(null);
+            if (!o) {
+              setSelectedClient(null);
+              setClientStmtFrom("");
+              setClientStmtTo("");
+            }
           }}
         >
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" dir="rtl">
@@ -1272,8 +1283,103 @@ export default function StatementPage() {
                     </Table>
                   </div>
                 </div>
+
+                {/* Detailed ledger statement (كشف حساب تفصيلي) */}
+                <div className="rounded-xl border-2 border-[hsl(43,65%,52%)]/60 overflow-hidden">
+                  <div className="bg-[hsl(220,40%,18%)] text-white px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+                    <p className="font-bold flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
+                    </p>
+                    <Button
+                      size="sm"
+                      className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                      onClick={() => setPrintClientStatement(true)}
+                    >
+                      <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                    </Button>
+                  </div>
+                  <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
+                    <div>
+                      <p className="text-xs mb-1 font-medium">من تاريخ</p>
+                      <Input type="date" className="h-9 w-40" value={clientStmtFrom} onChange={(e) => setClientStmtFrom(e.target.value)} />
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1 font-medium">إلى تاريخ</p>
+                      <Input type="date" className="h-9 w-40" value={clientStmtTo} onChange={(e) => setClientStmtTo(e.target.value)} />
+                    </div>
+                    {(clientStmtFrom || clientStmtTo) && (
+                      <Button variant="ghost" size="sm" onClick={() => { setClientStmtFrom(""); setClientStmtTo(""); }}>
+                        عرض كل الفترات
+                      </Button>
+                    )}
+                  </div>
+                  {clientDetail.ledger && (
+                    <LedgerTable ledger={clientDetail.ledger} compact />
+                  )}
+                </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Print client statement dialog */}
+        <Dialog open={printClientStatement} onOpenChange={(o) => { if (!o) setPrintClientStatement(false); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+            <DialogHeader className="no-print">
+              <DialogTitle>كشف حساب تفصيلي — {selectedClient ?? ""}</DialogTitle>
+            </DialogHeader>
+            {clientDetail?.ledger && (
+              <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
+                <PrintWatermark logo={office?.officeLogo} />
+                <div className="relative space-y-4">
+                  <PrintHeader
+                    office={office}
+                    details={[
+                      { label: "التاريخ", value: La(todayISO()) },
+                      { label: "العملة", value: "ريال سعودي" },
+                    ]}
+                  />
+                  {/* Statement title band */}
+                  <div className="flex items-stretch gap-2">
+                    <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
+                      كشف حساب تفصيلي للعميل: <span className="text-[hsl(43,70%,65%)]">{clientDetail.account.clientName}</span>
+                    </div>
+                    <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
+                      {clientStmtFrom || clientStmtTo
+                        ? `خلال الفترة من ${clientStmtFrom ? La(clientStmtFrom) : "البداية"} إلى ${clientStmtTo ? La(clientStmtTo) : "اليوم"}`
+                        : "عن كامل الفترة حتى تاريخه"}
+                    </div>
+                  </div>
+                  <LedgerTable ledger={clientDetail.ledger} />
+                  {/* Signature & stamp */}
+                  <div className="flex justify-between pt-4 text-sm">
+                    <div className="text-center">
+                      <p className="text-[hsl(220,40%,18%)] font-medium">توقيع العميل</p>
+                      <p className="mt-8 border-t border-[hsl(220,40%,18%)] w-32">&nbsp;</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                        {office?.signatureImage && (
+                          <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
+                        )}
+                        {office?.stampImage && (
+                          <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
+                        )}
+                      </div>
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2 no-print">
+              <Button variant="outline" onClick={() => setPrintClientStatement(false)}>
+                إغلاق
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="w-4 h-4 ml-1.5" /> طباعة
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

@@ -354,10 +354,65 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   const txRows = await db.select().from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.clientName, name))).orderBy(otherVisasTable.createdAt);
   const vouchers = await db.select().from(vouchersTable).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyName, name))).orderBy(vouchersTable.voucherDate);
 
+  // ---- Ledger view (كشف حساب تفصيلي) — same convention as agents ----
+  // balance = Σ(sale − received) → debit = salePrice, credit = receivedFromClient.
+  const toDate = (v: unknown): Date | null => {
+    if (!v) return null;
+    const dt = new Date(v as string);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
+  type LedgerRow = { ref: string; kind: string; date: string; sortKey: number; description: string; debit: number; credit: number };
+  const movements: LedgerRow[] = txRows
+    .flatMap((r) => {
+      const dt = toDate(r.issueDate) ?? r.createdAt;
+      const rows: LedgerRow[] = [{
+        ref: `V-${r.id}`,
+        kind: r.visaType || "تأشيرة",
+        date: dt.toISOString(),
+        sortKey: dt.getTime(),
+        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
+        debit: Number(r.salePrice) || 0,
+        credit: 0,
+      }];
+      const received = Number(r.receivedFromClient) || 0;
+      if (received > 0) {
+        rows.push({
+          ref: `R-${r.id}`,
+          kind: "مقبوضات",
+          date: dt.toISOString(),
+          sortKey: dt.getTime() + 1,
+          description: `لكم مقابل مبلغ مستلم منكم عن ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
+          debit: 0,
+          credit: received,
+        });
+      }
+      return rows;
+    })
+    .sort((a, b) => a.sortKey - b.sortKey);
+
+  // Compare by UTC calendar day so period boundaries never depend on server timezone.
+  const dayOf = (iso: string) => iso.slice(0, 10);
+  const parseDay = (v: unknown): string | null =>
+    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v).getTime()) ? v : null;
+  const fromDay = parseDay(req.query.from);
+  const toDay = parseDay(req.query.to);
+  const from = fromDay ? new Date(`${fromDay}T00:00:00.000Z`) : null;
+  const to = toDay ? new Date(`${toDay}T23:59:59.999Z`) : null;
+  const before = fromDay ? movements.filter((m) => dayOf(m.date) < fromDay) : [];
+  const inPeriod = movements.filter((m) =>
+    (!fromDay || dayOf(m.date) >= fromDay) && (!toDay || dayOf(m.date) <= toDay));
+  const opening = before.reduce((s, m) => s + m.debit - m.credit, 0);
+
   res.json({
     account: { clientName: name, phone: totals.phone, totalSales: totals.totalSales, totalReceived: totals.totalReceived, balance: totals.balance, txCount: totals.txCount },
     transactions: txRows.map((r) => ({ id: r.id, clientName: r.clientName, type: r.visaType, issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: Number(r.receivedFromClient), createdAt: r.createdAt.toISOString() })),
     vouchers: vouchers.map((v) => ({ id: v.id, kind: v.kind, partyType: v.partyType, partyName: v.partyName, amount: Number(v.amount), description: v.description, voucherDate: v.voucherDate.toISOString(), agentPaymentId: v.agentPaymentId, createdAt: v.createdAt.toISOString() })),
+    ledger: {
+      from: from ? from.toISOString() : null,
+      to: to ? to.toISOString() : null,
+      opening,
+      entries: inPeriod.map(({ sortKey, ...m }) => m),
+    },
   });
 });
 
