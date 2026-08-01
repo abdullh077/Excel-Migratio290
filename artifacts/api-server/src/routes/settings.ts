@@ -1,6 +1,4 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
-import { z } from "zod";
 import { db, officeSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
@@ -13,29 +11,8 @@ const router = Router();
 // most-recently-updated office's logo to anyone before login.
 router.use("/settings", requireOffice);
 
-const BrandingBody = z.object({
-  officeLogo: z.string().nullish(),
-});
-
-async function saveBranding(req: Request, res: Response): Promise<void> {
-  const officeId = req.session.officeId!;
-  const parsed = BrandingBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-
-  const [row] = await db
-    .insert(officeSettingsTable)
-    .values({ userId: officeId, officeLogo: parsed.data.officeLogo ?? null, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: officeSettingsTable.userId,
-      set: { officeLogo: parsed.data.officeLogo ?? null, updatedAt: new Date() },
-    })
-    .returning();
-
-  res.json({ officeName: row.officeName ?? "", officeLogo: row.officeLogo ?? "" });
-}
-
-router.post("/settings/branding", saveBranding);
-router.put("/settings/branding", saveBranding);
+// NOTE: the office-logo branding feature was removed entirely — the login
+// screen now uses a fixed OBOOR image, and the logo upload was error-prone.
 
 router.get("/settings/office", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;

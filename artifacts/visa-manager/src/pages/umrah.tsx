@@ -24,7 +24,6 @@ const EMPTY = {
   phone: "",
   agent: "",
   client: "",
-  openingBalance: "",
   issueDate: today(),
   stayDuration: 90,
   entryDate: "",
@@ -185,7 +184,6 @@ export default function UmrahPage() {
       phone: c.phone ?? "",
       agent: c.agent ?? "",
       client: c.client ?? "",
-      openingBalance: "",
       issueDate: c.issueDate ? String(c.issueDate).slice(0, 10) : today(),
       stayDuration: c.stayDuration ?? 90,
       entryDate: c.entryDate ? String(c.entryDate).slice(0, 10) : "",
@@ -209,7 +207,6 @@ export default function UmrahPage() {
     if (!form.issueDate?.trim()) e.issueDate = "تاريخ الإصدار مطلوب";
     if (form.stayDuration === "" || form.stayDuration == null || isNaN(Number(form.stayDuration)))
       e.stayDuration = "المدة مطلوبة";
-    if (form.openingBalance !== "" && isNaN(Number(form.openingBalance))) e.openingBalance = "يجب أن يكون رقماً";
     if (form.purchasePrice === "" || isNaN(Number(form.purchasePrice))) e.purchasePrice = "يجب أن يكون رقماً";
     if (form.salePrice === "" || isNaN(Number(form.salePrice))) e.salePrice = "يجب أن يكون رقماً";
     return e;
@@ -235,10 +232,6 @@ export default function UmrahPage() {
       salePrice: Number(form.salePrice),
       notes: form.notes || "",
     };
-    if (form.openingBalance !== "" && !isNaN(Number(form.openingBalance))) {
-      payload.openingBalance = Number(form.openingBalance);
-    }
-
     if (editing) {
       update.mutate({ id: editing, payload });
       return;
@@ -488,7 +481,6 @@ export default function UmrahPage() {
               </div>
               <Field label="سعر الشراء" required type="number" min={0} value={String(form.purchasePrice)} onChange={(v) => setForm((f: any) => ({ ...f, purchasePrice: v === "" ? "" : Number(v) }))} error={errors.purchasePrice} />
               <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
-              <Field label="الرصيد الافتتاحي للعميل (اختياري)" type="number" value={String(form.openingBalance)} onChange={(v) => setForm((f: any) => ({ ...f, openingBalance: v }))} error={errors.openingBalance} />
               <Field label="ملاحظات" value={form.notes} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
             </div>
             <DialogFooter>

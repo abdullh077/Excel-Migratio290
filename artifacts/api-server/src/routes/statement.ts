@@ -26,8 +26,9 @@ router.use("/statement/payments", requireOffice);
 router.use("/statement/clients", requireOffice);
 router.use("/statement/ledger", requireOffice);
 router.use("/statement/summary", requireOffice);
+router.use("/statement/opening", requireOffice);
 
-async function computeAgentBalance(officeId: number, agentId: number, agentName: string) {
+async function computeAgentBalance(officeId: number, agentId: number, agentName: string, openingBalance = 0) {
   const [salesRow] = await db
     .select({
       total: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
@@ -50,10 +51,20 @@ async function computeAgentBalance(officeId: number, agentId: number, agentName:
     .from(agentPaymentsTable)
     .where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agentId)));
 
+  // Standalone agent vouchers (not linked to an agent payment) count as
+  // movements too: receipt = قبضنا من الوكيل (credit), payment = صرفنا له (debit).
+  const [voucherRow] = await db
+    .select({
+      receipts: sql<number>`coalesce(sum(case when kind='receipt' then amount::float else 0 end),0)::float`,
+      payments: sql<number>`coalesce(sum(case when kind='payment' then amount::float else 0 end),0)::float`,
+    })
+    .from(vouchersTable)
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, agentName), isNull(vouchersTable.agentPaymentId)));
+
   const totalSales = (salesRow.total ?? 0) + (salesRow2.total ?? 0);
-  const paidFrom = payRow.paidFrom ?? 0;
-  const paidTo = payRow.paidTo ?? 0;
-  const balance = totalSales - paidFrom + paidTo;
+  const paidFrom = (payRow.paidFrom ?? 0) + (voucherRow.receipts ?? 0);
+  const paidTo = (payRow.paidTo ?? 0) + (voucherRow.payments ?? 0);
+  const balance = openingBalance + totalSales - paidFrom + paidTo;
   const profit = (salesRow.profit ?? 0) + (salesRow2.profit ?? 0);
   const txCount = (salesRow.count ?? 0) + (salesRow2.count ?? 0);
   return { totalSales, paidFrom, paidTo, balance, profit, txCount, transactions: txCount };
@@ -63,8 +74,9 @@ router.get("/statement/agents", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
   const agents = await db.select().from(agentsTable).where(eq(agentsTable.userId, officeId)).orderBy(agentsTable.name);
   const result = await Promise.all(agents.map(async (a) => {
-    const bal = await computeAgentBalance(officeId, a.id, a.name);
-    return { id: a.id, name: a.name, phone: a.phone, notes: a.notes, ...bal, createdAt: a.createdAt.toISOString() };
+    const opening = Number(a.openingBalance) || 0;
+    const bal = await computeAgentBalance(officeId, a.id, a.name, opening);
+    return { id: a.id, name: a.name, phone: a.phone, notes: a.notes, openingBalance: opening, ...bal, createdAt: a.createdAt.toISOString() };
   }));
   res.json(result);
 });
@@ -96,10 +108,12 @@ router.put("/statement/agents/:id", async (req, res): Promise<void> => {
   if (newName && newName !== oldName) {
     await db.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, oldName)));
     await db.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, oldName)));
+    // Standalone agent vouchers link by name too — keep them attached after rename.
+    await db.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, oldName)));
   }
 
-  const bal = await computeAgentBalance(officeId, row.id, row.name);
-  res.json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, ...bal, createdAt: row.createdAt.toISOString() });
+  const bal = await computeAgentBalance(officeId, row.id, row.name, Number(row.openingBalance) || 0);
+  res.json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, openingBalance: Number(row.openingBalance) || 0, ...bal, createdAt: row.createdAt.toISOString() });
 });
 
 router.delete("/statement/agents/:id", async (req, res): Promise<void> => {
@@ -119,7 +133,8 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
   if (!agent) { res.status(404).json({ error: "Not found" }); return; }
 
-  const bal = await computeAgentBalance(officeId, agent.id, agent.name);
+  const agentOpening = Number(agent.openingBalance) || 0;
+  const bal = await computeAgentBalance(officeId, agent.id, agent.name, agentOpening);
 
   const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, client: umrahClientsTable.client, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
   const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, client: otherVisasTable.client, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, purchasePrice: otherVisasTable.purchasePrice, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
@@ -130,6 +145,11 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const payments = await db.select().from(agentPaymentsTable).where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agent.id))).orderBy(agentPaymentsTable.paidAt);
+
+  // Standalone agent vouchers (not linked to agent payments) appear as movements.
+  const agentVouchers = await db.select().from(vouchersTable)
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, agent.name), isNull(vouchersTable.agentPaymentId)))
+    .orderBy(vouchersTable.voucherDate);
 
   // ---- Ledger view (كشف حساب تفصيلي): merged debit/credit movements ----
   // Convention: balance = sales − paidFrom + paidTo → debit = sale or paidTo, credit = paidFrom.
@@ -163,6 +183,21 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
         credit: isFrom ? amount : 0,
       };
     }),
+    ...agentVouchers.map((v) => {
+      const isReceipt = v.kind === "receipt";
+      const amount = Number(v.amount) || 0;
+      return {
+        ref: `S-${v.id}`,
+        kind: isReceipt ? "سند قبض" : "سند صرف",
+        date: v.voucherDate.toISOString(),
+        sortKey: v.voucherDate.getTime(),
+        description: isReceipt
+          ? `لكم مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
+          : `عليكم مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
+        debit: isReceipt ? 0 : amount,
+        credit: isReceipt ? amount : 0,
+      };
+    }),
   ].sort((a, b) => a.sortKey - b.sortKey);
 
   // Compare by UTC calendar day (issueDate strings parse to UTC midnight;
@@ -177,7 +212,8 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   const before = fromDay ? movements.filter((m) => dayOf(m.date) < fromDay) : [];
   const inPeriod = movements.filter((m) =>
     (!fromDay || dayOf(m.date) >= fromDay) && (!toDay || dayOf(m.date) <= toDay));
-  const opening = before.reduce((s, m) => s + m.debit - m.credit, 0);
+  // القيد الافتتاحي يسبق كل الحركات دائماً.
+  const opening = agentOpening + before.reduce((s, m) => s + m.debit - m.credit, 0);
 
   res.json({
     agent: { id: agent.id, name: agent.name, phone: agent.phone },
@@ -201,7 +237,7 @@ router.get("/statement/agents/:id/details", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
   if (!agent) { res.status(404).json({ error: "Not found" }); return; }
 
-  const bal = await computeAgentBalance(officeId, agent.id, agent.name);
+  const bal = await computeAgentBalance(officeId, agent.id, agent.name, Number(agent.openingBalance) || 0);
 
   const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
   const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, receivedFromClient: otherVisasTable.receivedFromClient, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
@@ -600,6 +636,51 @@ router.get("/statement/summary", async (req, res): Promise<void> => {
     });
 
   res.json(result);
+});
+
+// ---- القيد الافتتاحي: يربط رصيداً افتتاحياً بعميل أو وكيل ----
+const OpeningBody = z.object({
+  partyType: z.enum(["client", "agent"]),
+  name: z.string().trim().min(1),
+  amount: z.number(),
+});
+
+router.get("/statement/opening", async (req, res): Promise<void> => {
+  const officeId = req.session.officeId!;
+  const clientRows = await db.select().from(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.userId, officeId), sql`${clientAccountsTable.openingBalance} <> 0`));
+  const agentRows = await db.select().from(agentsTable)
+    .where(and(eq(agentsTable.userId, officeId), sql`${agentsTable.openingBalance} <> 0`));
+  res.json([
+    ...clientRows.map((r) => ({ partyType: "client" as const, name: r.clientName, amount: Number(r.openingBalance) })),
+    ...agentRows.map((r) => ({ partyType: "agent" as const, name: r.name, amount: Number(r.openingBalance) })),
+  ]);
+});
+
+router.post("/statement/opening", async (req, res): Promise<void> => {
+  const parsed = OpeningBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const officeId = req.session.officeId!;
+  const { partyType, name, amount } = parsed.data;
+
+  if (partyType === "agent") {
+    const [row] = await db.update(agentsTable)
+      .set({ openingBalance: String(amount) })
+      .where(and(eq(agentsTable.userId, officeId), eq(agentsTable.name, name)))
+      .returning();
+    if (!row) { res.status(404).json({ error: "الوكيل غير موجود" }); return; }
+    res.json({ partyType, name: row.name, amount: Number(row.openingBalance) });
+    return;
+  }
+
+  // Client: upsert into manual client accounts so it exists even before any visa.
+  const [existing] = await db.select().from(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, name)));
+  const [row] = existing
+    ? await db.update(clientAccountsTable).set({ openingBalance: String(amount) })
+        .where(eq(clientAccountsTable.id, existing.id)).returning()
+    : await db.insert(clientAccountsTable).values({ userId: officeId, clientName: name, openingBalance: String(amount) }).returning();
+  res.json({ partyType, name: row.clientName, amount: Number(row.openingBalance) });
 });
 
 export default router;

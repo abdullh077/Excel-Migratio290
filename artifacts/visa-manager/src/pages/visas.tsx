@@ -25,7 +25,6 @@ const EMPTY = {
   phone: "",
   agent: "",
   client: "",
-  openingBalance: "",
   issueDate: today(),
   visaType: "زيارة عائلية",
   transactionParty: "",
@@ -164,7 +163,6 @@ export default function VisasPage() {
       phone: v.phone ?? "",
       agent: v.agent ?? "",
       client: v.client ?? "",
-      openingBalance: "",
       issueDate: v.issueDate ? String(v.issueDate).slice(0, 10) : today(),
       visaType: v.visaType ?? "زيارة عائلية",
       transactionParty: v.transactionParty ?? "",
@@ -188,7 +186,6 @@ export default function VisasPage() {
     if (!form.agent?.trim()) e.agent = "الوكيل مطلوب";
     if (!form.issueDate?.trim()) e.issueDate = "تاريخ الإصدار مطلوب";
     if (!form.visaType?.trim()) e.visaType = "نوع التأشيرة مطلوب";
-    if (form.openingBalance !== "" && isNaN(Number(form.openingBalance))) e.openingBalance = "يجب أن يكون رقماً";
     if (form.purchasePrice === "" || isNaN(Number(form.purchasePrice))) e.purchasePrice = "يجب أن يكون رقماً";
     if (form.salePrice === "" || isNaN(Number(form.salePrice))) e.salePrice = "يجب أن يكون رقماً";
     if (form.receivedFromClient === "" || isNaN(Number(form.receivedFromClient))) e.receivedFromClient = "يجب أن يكون رقماً";
@@ -217,10 +214,6 @@ export default function VisasPage() {
       transferredToAgent: Number(form.transferredToAgent),
       notes: form.notes || "",
     };
-    if (form.openingBalance !== "" && !isNaN(Number(form.openingBalance))) {
-      payload.openingBalance = Number(form.openingBalance);
-    }
-
     if (editing) {
       update.mutate({ id: editing, payload });
       return;
@@ -448,7 +441,6 @@ export default function VisasPage() {
               <Field label="سعر البيع" required type="number" min={0} value={String(form.salePrice)} onChange={(v) => setForm((f: any) => ({ ...f, salePrice: v === "" ? "" : Number(v) }))} error={errors.salePrice} />
               <Field label="مستلم من العميل" required type="number" min={0} value={String(form.receivedFromClient)} onChange={(v) => setForm((f: any) => ({ ...f, receivedFromClient: v === "" ? "" : Number(v) }))} error={errors.receivedFromClient} />
               <Field label="محول للوكيل" required type="number" min={0} value={String(form.transferredToAgent)} onChange={(v) => setForm((f: any) => ({ ...f, transferredToAgent: v === "" ? "" : Number(v) }))} error={errors.transferredToAgent} />
-              <Field label="الرصيد الافتتاحي للعميل (اختياري)" type="number" value={String(form.openingBalance)} onChange={(v) => setForm((f: any) => ({ ...f, openingBalance: v }))} error={errors.openingBalance} />
               <Field label="ملاحظات" value={form.notes} onChange={(v) => setForm((f: any) => ({ ...f, notes: v }))} />
             </div>
             <DialogFooter>

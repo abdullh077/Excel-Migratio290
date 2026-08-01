@@ -31,17 +31,6 @@ async function saveOffice(body: any) {
   return res.json();
 }
 
-async function saveBranding(officeLogo: string | null) {
-  const res = await fetch("/api/settings/branding", {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ officeLogo }),
-  });
-  if (!res.ok) throw new Error(String(res.status));
-  return res.json();
-}
-
 const DEFAULT_UMRAH_TEMPLATE =
   "السلام عليكم ورحمة الله،\nمن {office}.\nنذكّركم بقرب انتهاء مدة إقامة العمرة الخاصة بالمعتمر: {name}.\nالمتبقّي: {days} يوماً.\nنرجو التكرم بمراجعتنا لإتمام إجراءات المغادرة في الوقت المحدد.\nشاكرين لكم حسن تعاونكم.";
 
@@ -61,10 +50,8 @@ export default function OfficePage() {
     whatsappUmrahTemplate: "",
     whatsappOtherTemplate: "",
   });
-  const [logo, setLogo] = useState<string | null>(null);
   const [stamp, setStamp] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
-  const logoInput = useRef<HTMLInputElement>(null);
   const stampInput = useRef<HTMLInputElement>(null);
   const signatureInput = useRef<HTMLInputElement>(null);
 
@@ -79,7 +66,6 @@ export default function OfficePage() {
         whatsappUmrahTemplate: settings.whatsappUmrahTemplate ?? DEFAULT_UMRAH_TEMPLATE,
         whatsappOtherTemplate: settings.whatsappOtherTemplate ?? DEFAULT_OTHER_TEMPLATE,
       });
-      setLogo(settings.officeLogo ?? null);
       setStamp(settings.stampImage ?? null);
       setSignature(settings.signatureImage ?? null);
     }
@@ -87,63 +73,21 @@ export default function OfficePage() {
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      const result = await saveOffice({
+      return saveOffice({
         ...form,
-        officeLogo: logo,
         stampImage: stamp,
         signatureImage: signature,
         configured: true,
       });
-      // Ensure the public branding row (read by the login page) has the logo too.
-      await saveBranding(logo);
-      return result;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: OFFICE_KEY });
-      if (logo) localStorage.setItem("oboor-last-logo", logo);
-      else localStorage.removeItem("oboor-last-logo");
       toast({ title: "تم حفظ بيانات المكتب" });
-    },
-  });
-
-  const brandingMut = useMutation({
-    mutationFn: (v: string | null) => saveBranding(v),
-    onSuccess: (_data, v) => {
-      qc.invalidateQueries({ queryKey: OFFICE_KEY });
-      if (v) {
-        localStorage.setItem("oboor-last-logo", v);
-        toast({ title: "تم حفظ الشعار" });
-      } else {
-        localStorage.removeItem("oboor-last-logo");
-        toast({ title: "تم حذف الشعار" });
-      }
     },
   });
 
   function set(key: keyof typeof form) {
     return (v: string) => setForm((prev) => ({ ...prev, [key]: v }));
-  }
-
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) {
-      toast({ title: "اختر صورة أصغر من 1.5 ميجابايت", variant: "destructive" });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      setLogo(dataUrl);
-      brandingMut.mutate(dataUrl);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function removeLogo() {
-    setLogo(null);
-    brandingMut.mutate(null);
   }
 
   function handleImageUpload(setter: (v: string | null) => void) {
@@ -178,27 +122,6 @@ export default function OfficePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Logo */}
-          <Card className="p-5 space-y-3 lg:col-span-2">
-            <Label>شعار المكتب (يظهر في شاشة تسجيل الدخول)</Label>
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 border rounded-md bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {logo ? <img src={logo} alt="شعار المكتب" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => logoInput.current?.click()} disabled={brandingMut.isPending}>
-                  <Upload className="w-4 h-4 ml-1" />رفع صورة
-                </Button>
-                {logo && (
-                  <Button variant="ghost" size="sm" className="text-destructive" onClick={removeLogo} disabled={brandingMut.isPending}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-              <input ref={logoInput} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-            </div>
-          </Card>
-
           {/* Stamp */}
           <Card className="p-5 space-y-3">
             <Label>ختم المكتب (يظهر في السند)</Label>

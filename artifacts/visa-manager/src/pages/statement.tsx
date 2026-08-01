@@ -84,6 +84,9 @@ const createVoucher = (body: any) =>
 const deleteVoucher = (id: any) =>
   fetch(`/api/vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
 const getOffice = () => fetch("/api/settings/office", { credentials: "include" }).then(handle);
+const listOpening = () => fetch("/api/statement/opening", { credentials: "include" }).then(handle);
+const saveOpening = (body: any) =>
+  fetch("/api/statement/opening", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
 const listAgentNames = () => fetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
 
 async function handle(res: Response) {
@@ -334,6 +337,11 @@ export default function StatementPage() {
   const [stmtTo, setStmtTo] = useState("");
   const [printStatement, setPrintStatement] = useState(false);
 
+  // opening entry tab (قيد افتتاحي)
+  const [openType, setOpenType] = useState<"client" | "agent">("client");
+  const [openName, setOpenName] = useState("");
+  const [openAmount, setOpenAmount] = useState("");
+
   const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
   const { data: ledger, isLoading: ledgerLoading } = useQuery({ queryKey: LEDGER_KEY, queryFn: listLedger });
   const { data: summary, isLoading: summaryLoading } = useQuery({ queryKey: SUMMARY_KEY, queryFn: getSummary });
@@ -351,6 +359,20 @@ export default function StatementPage() {
   const { data: vouchers, isLoading: vouchersLoading } = useQuery({ queryKey: VOUCHERS_KEY, queryFn: listVouchers });
   const { data: office } = useQuery({ queryKey: OFFICE_KEY, queryFn: getOffice });
   const { data: agentNames } = useQuery({ queryKey: ["agent-names"], queryFn: listAgentNames });
+  const { data: openingEntries, isLoading: openingLoading } = useQuery({ queryKey: ["statement-opening"], queryFn: listOpening });
+
+  const openingMut = useMutation({
+    mutationFn: saveOpening,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["statement-opening"] });
+      qc.invalidateQueries({ queryKey: AGENTS_KEY });
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      setOpenName("");
+      setOpenAmount("");
+      toast({ title: "تم حفظ القيد الافتتاحي" });
+    },
+    onError: (e: any) => toast({ title: e?.message?.includes("404") || e?.message?.includes("موجود") ? "الوكيل غير موجود — أضفه أولاً من تبويب الوكلاء" : "تعذر حفظ القيد الافتتاحي", variant: "destructive" }),
+  });
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: AGENTS_KEY });
@@ -552,6 +574,9 @@ export default function StatementPage() {
             </TabsTrigger>
             <TabsTrigger value="summary">
               <BarChart3 className="w-4 h-4 ml-1.5" /> الملخص الشهري
+            </TabsTrigger>
+            <TabsTrigger value="opening">
+              <Wallet className="w-4 h-4 ml-1.5" /> قيد افتتاحي
             </TabsTrigger>
           </TabsList>
 
@@ -937,6 +962,86 @@ export default function StatementPage() {
                     ))
                   ) : (
                     <EmptyRow colSpan={7} icon={BarChart3} title="لا توجد بيانات بعد" hint="الملخص يُبنى تلقائياً من معاملاتك وقيودك" />
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Opening entry tab — قيد افتتاحي */}
+          <TabsContent value="opening" className="space-y-4">
+            <p className="text-sm text-muted-foreground no-print">
+              سجّل رصيداً افتتاحياً لعميل أو وكيل، ويظهر تلقائياً في كشف حسابه. القيمة الموجبة تعني أن عليه مبلغاً لك.
+            </p>
+            <div className="rounded-lg border border-border p-4 max-w-xl space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">النوع</label>
+                  <select
+                    className="w-full h-10 border rounded-md px-3 text-sm bg-background"
+                    value={openType}
+                    onChange={(e) => { setOpenType(e.target.value as any); setOpenName(""); }}
+                  >
+                    <option value="client">عميل</option>
+                    <option value="agent">وكيل</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">{openType === "agent" ? "اسم الوكيل" : "اسم العميل"}</label>
+                  <Input
+                    value={openName}
+                    onChange={(e) => setOpenName(e.target.value)}
+                    placeholder={openType === "agent" ? "اختر أو اكتب اسم الوكيل" : "اختر أو اكتب اسم العميل"}
+                    list="opening-names"
+                  />
+                  <datalist id="opening-names">
+                    {(openType === "agent"
+                      ? (agentNames ?? []).map((a: any) => (typeof a === "string" ? a : a.name))
+                      : (clients ?? []).map((c: any) => c.clientName)
+                    ).map((n: string) => <option key={n} value={n} />)}
+                  </datalist>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">المبلغ</label>
+                  <Input type="number" value={openAmount} onChange={(e) => setOpenAmount(e.target.value)} placeholder="0" dir="ltr" />
+                </div>
+              </div>
+              <Button
+                disabled={openingMut.isPending || !openName.trim() || openAmount === "" || isNaN(Number(openAmount))}
+                onClick={() => openingMut.mutate({ partyType: openType, name: openName.trim(), amount: Number(openAmount) })}
+              >
+                {openingMut.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-1.5" /> : <Plus className="w-4 h-4 ml-1.5" />}
+                حفظ القيد الافتتاحي
+              </Button>
+              <p className="text-xs text-muted-foreground">لحذف قيد افتتاحي، احفظه بمبلغ 0.</p>
+            </div>
+
+            <div className="rounded-lg border border-border overflow-x-auto max-w-xl">
+              <Table>
+                <TableHeader>
+                  <TableRow className="whitespace-nowrap">
+                    <TableHead className="text-right">النوع</TableHead>
+                    <TableHead className="text-right">الاسم</TableHead>
+                    <TableHead className="text-right">الرصيد الافتتاحي</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {openingLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-10">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                      </TableCell>
+                    </TableRow>
+                  ) : openingEntries?.length ? (
+                    openingEntries.map((e: any) => (
+                      <TableRow key={`${e.partyType}-${e.name}`} className="whitespace-nowrap">
+                        <TableCell>{e.partyType === "agent" ? "وكيل" : "عميل"}</TableCell>
+                        <TableCell className="font-medium">{e.name}</TableCell>
+                        <TableCell dir="ltr">{nt(e.amount)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <EmptyRow colSpan={3} icon={Wallet} title="لا توجد قيود افتتاحية" hint="أضف قيداً افتتاحياً من النموذج أعلاه" />
                   )}
                 </TableBody>
               </Table>

@@ -51,27 +51,26 @@ export default function ArchivePage() {
               <thead className="bg-muted/50 text-muted-foreground text-xs">
                 <tr>
                   <th className="px-3 py-3 text-right font-medium">م</th>
-                  <th className="px-3 py-3 text-right font-medium">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium">اسم الجواز</th>
                   <th className="px-3 py-3 text-right font-medium">الوكيل</th>
                   <th className="px-3 py-3 text-right font-medium">التاريخ</th>
-                  <th className="px-3 py-3 text-right font-medium">النوع/المصدر</th>
+                  <th className="px-3 py-3 text-right font-medium">النوع</th>
                   <th className="px-3 py-3 text-left font-medium">الشراء</th>
                   <th className="px-3 py-3 text-left font-medium">البيع</th>
                   <th className="px-3 py-3 text-left font-medium">الربح</th>
-                  <th className="px-3 py-3 text-right font-medium">المصدر</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={9} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
                       جاري تحميل الأرشيف...
                     </td>
                   </tr>
                 )}
                 {!isLoading && records.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-12">
+                    <td colSpan={8} className="py-12">
                       <div className="flex flex-col items-center justify-center text-center text-muted-foreground">
                         <ArchiveIcon className="w-10 h-10 mb-3 opacity-50" />
                         <p className="font-medium">لا توجد سجلات في الأرشيف</p>
@@ -102,7 +101,6 @@ export default function ArchivePage() {
                           {fmt(r.profit)}
                         </span>
                       </td>
-                      <td className="px-3 py-2">{r.source}</td>
                     </tr>
                   ))}
               </tbody>

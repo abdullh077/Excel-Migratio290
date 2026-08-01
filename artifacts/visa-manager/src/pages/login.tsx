@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, clearClientCaches } from "@/lib/api";
-import { Loader2, Shield, ClipboardList, BarChart3, Wallet } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "اسم المستخدم مطلوب"),
@@ -75,76 +75,13 @@ export default function LoginPage() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-background flex flex-col md:flex-row">
-      {/* Hero */}
-      <div className="hidden md:flex flex-1 relative overflow-hidden bg-[#0a1628] flex-col items-center justify-center p-12 text-white">
-        <div
-          className="absolute inset-0 opacity-70"
-          style={{
-            background:
-              "radial-gradient(circle at 30% 30%, rgba(198,161,91,0.18), transparent 45%), radial-gradient(circle at 70% 70%, rgba(198,161,91,0.12), transparent 50%)",
-          }}
+      {/* Hero — الصورة الرسمية لعبور، على خلفية كحلية مطابقة للتصميم */}
+      <div className="hidden md:flex flex-1 relative overflow-hidden bg-[#0d1b33] items-center justify-center">
+        <img
+          src="/oboor-login.jpg"
+          alt="OBOOR — للسفر والسياحة والعمرة"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         />
-        <div className="relative z-10 flex flex-col items-center text-center max-w-md">
-          <svg
-              width="112"
-              height="112"
-              viewBox="0 0 112 112"
-              fill="none"
-              className="mb-8"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <defs>
-                <linearGradient id="goldShield" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#e6c583" />
-                  <stop offset="100%" stopColor="#b8923f" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M56 8 L96 24 V56 C96 80 78 98 56 106 C34 98 16 80 16 56 V24 Z"
-                fill="none"
-                stroke="url(#goldShield)"
-                strokeWidth="3"
-              />
-              <path
-                d="M40 56 L52 68 L74 44"
-                fill="none"
-                stroke="url(#goldShield)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          <h1 className="text-5xl font-extrabold tracking-widest text-[hsl(40,66%,60%)]">
-            OBOOR
-          </h1>
-          <p className="mt-2 text-lg text-white/80">للتقنية والحلول الرقمية</p>
-          <p className="mt-6 text-base text-white/70 leading-relaxed">
-            عبور: زيادة رقمية، وجهة في الإنجاز
-          </p>
-
-          <div className="mt-10 grid grid-cols-2 gap-4 w-full">
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
-              <Shield className="w-5 h-5 text-[hsl(40,66%,60%)]" />
-              <span className="text-sm">نظام أمان وحماية</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
-              <ClipboardList className="w-5 h-5 text-[hsl(40,66%,60%)]" />
-              <span className="text-sm">إدارة الطلبات</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
-              <BarChart3 className="w-5 h-5 text-[hsl(40,66%,60%)]" />
-              <span className="text-sm">التقارير والإحصاءات</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
-              <Wallet className="w-5 h-5 text-[hsl(40,66%,60%)]" />
-              <span className="text-sm">الحسابات المالية</span>
-            </div>
-          </div>
-
-          <p className="mt-10 text-sm text-white/60" dir="ltr">
-            771436479
-          </p>
-        </div>
       </div>
 
       {/* Form */}
