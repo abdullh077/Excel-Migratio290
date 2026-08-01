@@ -12,6 +12,8 @@ import vouchersRouter from "./vouchers.js";
 const router = Router();
 
 router.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+// Root of the API service — the deployment health probe hits GET /api and requires a 200.
+router.get("/", (_req, res) => res.json({ status: "ok" }));
 
 router.use(publicSettingsRouter);
 router.use(authRouter);
