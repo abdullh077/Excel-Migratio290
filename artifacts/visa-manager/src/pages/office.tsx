@@ -50,8 +50,10 @@ export default function OfficePage() {
     whatsappUmrahTemplate: "",
     whatsappOtherTemplate: "",
   });
+  const [logo, setLogo] = useState<string | null>(null);
   const [stamp, setStamp] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const logoInput = useRef<HTMLInputElement>(null);
   const stampInput = useRef<HTMLInputElement>(null);
   const signatureInput = useRef<HTMLInputElement>(null);
 
@@ -66,6 +68,7 @@ export default function OfficePage() {
         whatsappUmrahTemplate: settings.whatsappUmrahTemplate ?? DEFAULT_UMRAH_TEMPLATE,
         whatsappOtherTemplate: settings.whatsappOtherTemplate ?? DEFAULT_OTHER_TEMPLATE,
       });
+      setLogo(settings.officeLogo ?? null);
       setStamp(settings.stampImage ?? null);
       setSignature(settings.signatureImage ?? null);
     }
@@ -75,6 +78,7 @@ export default function OfficePage() {
     mutationFn: async () => {
       return saveOffice({
         ...form,
+        officeLogo: logo,
         stampImage: stamp,
         signatureImage: signature,
         configured: true,
@@ -122,6 +126,28 @@ export default function OfficePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Logo — يظهر في السندات والمطبوعات فقط (وليس في شاشة تسجيل الدخول) */}
+          <Card className="p-5 space-y-3 lg:col-span-2">
+            <Label>شعار المكتب (يظهر في السندات والمطبوعات)</Label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 border rounded-md bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logo ? <img src={logo} alt="شعار المكتب" className="w-full h-full object-contain" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => logoInput.current?.click()}>
+                  <Upload className="w-4 h-4 ml-1" />رفع صورة
+                </Button>
+                {logo && (
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setLogo(null)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              <input ref={logoInput} type="file" accept="image/*" className="hidden" onChange={handleImageUpload(setLogo)} />
+            </div>
+            <p className="text-xs text-muted-foreground">لا تنسَ الضغط على "حفظ البيانات" بالأسفل بعد رفع الشعار.</p>
+          </Card>
+
           {/* Stamp */}
           <Card className="p-5 space-y-3">
             <Label>ختم المكتب (يظهر في السند)</Label>
