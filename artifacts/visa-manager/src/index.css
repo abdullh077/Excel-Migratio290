@@ -301,9 +301,43 @@
 }
 
 /* Print styles */
+@page {
+  size: A4;
+  margin: 10mm 8mm;
+}
+
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  /* No scrollbars or clipped content in printouts */
+  .voucher-print,
+  .voucher-print .overflow-x-auto,
+  .voucher-print .overflow-hidden,
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Dialogs that host printables must expand to full height */
+  [role='dialog'] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Repeating office header on every printed page (print-repeat-header wraps content in a table) */
+  .print-repeat-header > thead {
+    display: table-header-group;
+  }
+  .print-repeat-header > thead > tr > td,
+  .print-repeat-header > tbody > tr > td {
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  /* Avoid splitting table rows and signatures across pages */
+  tr {
+    break-inside: avoid;
   }
 
   .voucher-print,

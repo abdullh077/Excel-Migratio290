@@ -294,7 +294,7 @@ export default function UmrahPage() {
       <div className="p-6" dir="rtl">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-xl font-bold">عملاء العمرة</h1>
+            <h1 className="text-xl font-bold">تأشيرات العمرة</h1>
             <p className="text-sm text-muted-foreground mt-1">إدارة بيانات المعتمرين وحالات التأشيرات الخاصة بهم.</p>
           </div>
           <Button onClick={openNew} size="sm">

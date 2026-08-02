@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer, FileSpreadsheet } from "lucide-react";
+import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer, FileSpreadsheet, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
@@ -149,9 +149,9 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
   const opening = Number(ledger?.opening) || 0;
   let run = opening;
   const balLabel = (v: number) => (v > 0 ? `${Math.abs(v)} (عليه)` : v < 0 ? `${Math.abs(v)} (له)` : "0 (مسدَّد)");
-  const header = ["المرجع", "نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"];
+  const header = ["نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"];
   const rows: any[][] = [
-    ["—", "الرصيد الافتتاحي", ledger?.from ? La(ledger.from) : "—", "رصيد ما قبل الفترة", "", "", balLabel(opening)],
+    ["الرصيد الافتتاحي", ledger?.from ? La(ledger.from) : "—", "رصيد ما قبل الفترة", "", "", balLabel(opening)],
   ];
   let totalDebit = 0;
   let totalCredit = 0;
@@ -161,12 +161,11 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
     run += debit - credit;
     totalDebit += debit;
     totalCredit += credit;
-    rows.push([e.ref, e.kind, La(e.date), e.description, debit || "", credit || "", balLabel(run)]);
+    rows.push([e.kind, La(e.date), e.description, debit || "", credit || "", balLabel(run)]);
   }
   const final = opening + totalDebit - totalCredit;
-  rows.push(["", "", "", "الإجمالي", totalDebit, totalCredit, balLabel(final)]);
+  rows.push(["", "", "الإجمالي", totalDebit, totalCredit, balLabel(final)]);
   rows.push([
-    "",
     "",
     "",
     final > 0 ? `عليكم مبلغ ${nt(final)}` : final < 0 ? `لكم مبلغ ${nt(-final)}` : "الرصيد مسدَّد بالكامل — لا مستحقات",
@@ -180,7 +179,7 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
       ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
       : "عن كامل الفترة حتى تاريخه";
   const ws = XLSX.utils.aoa_to_sheet([[title], [period], [], header, ...rows]);
-  ws["!cols"] = [{ wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
+  ws["!cols"] = [{ wch: 16 }, { wch: 18 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب");
   if (!wb.Workbook) wb.Workbook = {};
@@ -213,14 +212,13 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="text-white whitespace-nowrap" style={{ background: navy }}>
-            {["المرجع", "نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"].map((h) => (
+            {["نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"].map((h) => (
               <th key={h} className="px-3 py-2 text-right font-bold border" style={{ borderColor: gold }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           <tr className="whitespace-nowrap bg-[hsl(43,65%,52%)]/10">
-            <td className="px-3 py-2 border border-border">—</td>
             <td className="px-3 py-2 border border-border font-semibold">الرصيد الافتتاحي</td>
             <td className="px-3 py-2 border border-border">{ledger.from ? La(ledger.from) : "—"}</td>
             <td className="px-3 py-2 border border-border">رصيد ما قبل الفترة</td>
@@ -231,7 +229,6 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
           {rows.length ? (
             rows.map((r: any) => (
               <tr key={r.ref} className="whitespace-nowrap odd:bg-muted/20">
-                <td className="px-3 py-2 border border-border font-mono text-xs">{r.ref}</td>
                 <td className="px-3 py-2 border border-border">{r.kind}</td>
                 <td className="px-3 py-2 border border-border">{La(r.date)}</td>
                 <td className="px-3 py-2 border border-border whitespace-normal min-w-48">{r.description}</td>
@@ -242,13 +239,13 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
             ))
           ) : (
             <tr>
-              <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground border border-border">
+              <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground border border-border">
                 لا توجد حركات خلال هذه الفترة
               </td>
             </tr>
           )}
           <tr className="whitespace-nowrap font-bold" style={{ background: "hsl(43,65%,52%,0.25)" }}>
-            <td colSpan={4} className="px-3 py-2 border text-right" style={{ borderColor: navy }}>الإجمالي</td>
+            <td colSpan={3} className="px-3 py-2 border text-right" style={{ borderColor: navy }}>الإجمالي</td>
             <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalDebit)}</td>
             <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalCredit)}</td>
             <td className="px-3 py-2 border" style={{ borderColor: navy }}>
@@ -317,9 +314,6 @@ export default function StatementPage() {
 
   // clients tab
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
-  const [clientDialog, setClientDialog] = useState(false);
-  const [clientNameField, setClientNameField] = useState("");
-  const [clientPhoneField, setClientPhoneField] = useState("");
   const [clientStmtFrom, setClientStmtFrom] = useState("");
   const [clientStmtTo, setClientStmtTo] = useState("");
   const [printClientStatement, setPrintClientStatement] = useState(false);
@@ -327,20 +321,25 @@ export default function StatementPage() {
   // vouchers tab
   const [voucherDialog, setVoucherDialog] = useState(false);
   const [voucherKind, setVoucherKind] = useState<"receipt" | "payment">("receipt");
-  const [vParty, setVParty] = useState("");
   const [vAmount, setVAmount] = useState("");
   const [vDesc, setVDesc] = useState("");
   const [vDate, setVDate] = useState(todayISO());
-  const [vAgent, setVAgent] = useState<string>("");
+  // ربط السند بوكيل أو عميل — القيمة بصيغة "agent|الاسم" أو "client|الاسم"
+  const [vLink, setVLink] = useState<string>("");
   const [printVoucher, setPrintVoucher] = useState<any>(null);
   const [stmtFrom, setStmtFrom] = useState("");
   const [stmtTo, setStmtTo] = useState("");
   const [printStatement, setPrintStatement] = useState(false);
 
-  // opening entry tab (قيد افتتاحي)
+  // opening entry dialog (قيد افتتاحي)
+  const [openingDialog, setOpeningDialog] = useState(false);
   const [openType, setOpenType] = useState<"client" | "agent">("client");
   const [openName, setOpenName] = useState("");
   const [openAmount, setOpenAmount] = useState("");
+
+  // search (agents & clients tabs)
+  const [agentSearch, setAgentSearch] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
 
   const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
   const { data: ledger, isLoading: ledgerLoading } = useQuery({ queryKey: LEDGER_KEY, queryFn: listLedger });
@@ -383,24 +382,6 @@ export default function StatementPage() {
 
   const onError = (e: any) =>
     toast({ variant: "destructive", title: "خطأ", description: e?.message || "حدث خطأ" });
-
-  const addClient = useMutation({
-    mutationFn: () =>
-      fetch("/api/statement/clients", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientName: clientNameField.trim(), phone: clientPhoneField.trim() || null }),
-      }).then(handle),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
-      setClientDialog(false);
-      setClientNameField("");
-      setClientPhoneField("");
-      toast({ title: "تم إضافة حساب العميل" });
-    },
-    onError,
-  });
 
   const saveAgent = useMutation({
     mutationFn: () =>
@@ -478,25 +459,27 @@ export default function StatementPage() {
   });
 
   const addVoucher = useMutation({
-    mutationFn: () =>
-      createVoucher({
+    mutationFn: () => {
+      const [linkType, linkName] = vLink.split("|");
+      return createVoucher({
         kind: voucherKind,
-        partyType: vAgent && vParty.trim() === vAgent ? "agent" : "other",
-        partyName: vParty.trim(),
+        partyType: linkType as "agent" | "client",
+        partyName: linkName,
         amount: Number(vAmount),
         description: vDesc.trim() || undefined,
         voucherDate: vDate ? new Date(vDate).toISOString() : undefined,
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      qc.invalidateQueries({ queryKey: AGENTS_KEY });
       qc.invalidateQueries({ queryKey: ["statement-client"] });
       setVoucherDialog(false);
-      setVParty("");
       setVAmount("");
       setVDesc("");
       setVDate(todayISO());
-      setVAgent("");
+      setVLink("");
       toast({ title: voucherKind === "receipt" ? "تم إنشاء سند القبض" : "تم إنشاء سند الصرف" });
     },
     onError,
@@ -515,18 +498,12 @@ export default function StatementPage() {
 
   const openVoucher = (kind: "receipt" | "payment") => {
     setVoucherKind(kind);
-    setVParty("");
     setVAmount("");
     setVDesc("");
     setVDate(todayISO());
-    setVAgent("");
+    setVLink("");
     setVoucherDialog(true);
   };
-
-  const partyOptions: string[] = [
-    ...((agentNames as string[] | undefined) ?? []),
-    ...((clients as any[] | undefined)?.map((c) => c.clientName) ?? []),
-  ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
   const openNew = () => {
     setEditing(null);
@@ -575,24 +552,17 @@ export default function StatementPage() {
             <TabsTrigger value="summary">
               <BarChart3 className="w-4 h-4 ml-1.5" /> الملخص الشهري
             </TabsTrigger>
-            <TabsTrigger value="opening">
-              <Wallet className="w-4 h-4 ml-1.5" /> قيد افتتاحي
-            </TabsTrigger>
           </TabsList>
 
           {/* Agents tab */}
           <TabsContent value="agents" className="space-y-4">
-            <div className="flex items-center justify-between no-print">
+            <div className="flex items-center justify-between no-print gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                سجّل وكلاءك هنا، واختر اسم الوكيل عند إضافة أي معاملة ليظهر في كشفه.
+                يُضاف الوكيل تلقائياً عند تسجيل أي معاملة باسمه، ويظهر هنا كشف حسابه.
               </p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => window.print()}>
-                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
-                </Button>
-                <Button onClick={openNew}>
-                  <Plus className="w-4 h-4 ml-1.5" /> وكيل جديد
-                </Button>
+              <div className="relative w-64">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input className="pr-9 h-9" placeholder="بحث باسم الوكيل..." value={agentSearch} onChange={(e) => setAgentSearch(e.target.value)} />
               </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
@@ -616,7 +586,7 @@ export default function StatementPage() {
                       </TableCell>
                     </TableRow>
                   ) : agents?.length ? (
-                    agents.map((ie: any) => (
+                    agents.filter((a: any) => !agentSearch.trim() || (a.name ?? "").includes(agentSearch.trim())).map((ie: any) => (
                       <TableRow key={ie.id} className="whitespace-nowrap hover:bg-muted/30">
                         <TableCell className="font-medium">{ie.name}</TableCell>
                         <TableCell>{ie.phone || "-"}</TableCell>
@@ -659,15 +629,11 @@ export default function StatementPage() {
           <TabsContent value="clients" className="space-y-4">
             <div className="flex items-center justify-between no-print gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                كشوف حسابات العملاء تُبنى تلقائياً من التأشيرات، وتقدر تضيف حساب عميل يدوياً. اضغط على أي عميل لعرض التفاصيل.
+                كشوف حسابات العملاء تُبنى تلقائياً من التأشيرات عند تسجيلها.
               </p>
-              <div className="flex gap-2">
-                <Button onClick={() => { setClientNameField(""); setClientPhoneField(""); setClientDialog(true); }}>
-                  <Plus className="w-4 h-4 ml-1.5" /> إضافة حساب عميل
-                </Button>
-                <Button variant="outline" onClick={() => window.print()}>
-                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
-                </Button>
+              <div className="relative w-64">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input className="pr-9 h-9" placeholder="بحث باسم العميل..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
               </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
@@ -680,17 +646,18 @@ export default function StatementPage() {
                     <TableHead className="text-right">إجمالي البيع</TableHead>
                     <TableHead className="text-right">المقبوض</TableHead>
                     <TableHead className="text-right">الرصيد</TableHead>
+                    <TableHead className="text-right">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {clientsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-10">
+                      <TableCell colSpan={7} className="text-center py-10">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
                       </TableCell>
                     </TableRow>
                   ) : clients?.length ? (
-                    clients.map((c: any) => (
+                    clients.filter((c: any) => !clientSearch.trim() || (c.clientName ?? "").includes(clientSearch.trim())).map((c: any) => (
                       <TableRow
                         key={c.clientName}
                         className="whitespace-nowrap hover:bg-muted/30 cursor-pointer"
@@ -704,47 +671,30 @@ export default function StatementPage() {
                         <TableCell>
                           <ClientBalanceBadge balance={c.balance} />
                         </TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(c.clientName); }}>
+                            <FileText className="w-4 h-4 ml-1" /> كشف الحساب
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={6} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
+                    <EmptyRow colSpan={7} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
                   )}
                 </TableBody>
               </Table>
             </div>
           </TabsContent>
 
-            {/* Add client dialog */}
-            <Dialog open={clientDialog} onOpenChange={setClientDialog}>
-              <DialogContent dir="rtl">
-                <DialogHeader><DialogTitle>إضافة حساب عميل</DialogTitle></DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">اسم العميل</label>
-                    <Input value={clientNameField} onChange={(e) => setClientNameField(e.target.value)} placeholder="اسم العميل" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">رقم الهاتف (اختياري)</label>
-                    <Input value={clientPhoneField} onChange={(e) => setClientPhoneField(e.target.value)} dir="ltr" className="text-left" placeholder="7xxxxxxxx" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">أي تأشيرات بنفس اسم العميل ستظهر في حسابه تلقائياً.</p>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setClientDialog(false)}>إلغاء</Button>
-                  <Button onClick={() => addClient.mutate()} disabled={addClient.isPending || !clientNameField.trim()}>إضافة</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
           {/* Vouchers tab */}
           <TabsContent value="vouchers" className="space-y-4">
             <div className="flex items-center justify-between no-print">
               <p className="text-sm text-muted-foreground">
-                أنشئ سندات القبض والصرف النقدية للوكلاء والعملاء والجهات الأخرى.
+                أنشئ سندات القبض والصرف النقدية مرتبطة بحساب وكيل أو عميل.
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => window.print()}>
-                  <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
+                <Button variant="outline" onClick={() => { setOpenName(""); setOpenAmount(""); setOpeningDialog(true); }}>
+                  <Wallet className="w-4 h-4 ml-1.5" /> قيد افتتاحي
                 </Button>
                 <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openVoucher("receipt")}>
                   <ArrowUpCircle className="w-4 h-4 ml-1.5" /> سند قبض
@@ -968,12 +918,18 @@ export default function StatementPage() {
             </div>
           </TabsContent>
 
-          {/* Opening entry tab — قيد افتتاحي */}
-          <TabsContent value="opening" className="space-y-4">
-            <p className="text-sm text-muted-foreground no-print">
+        </Tabs>
+
+        {/* Opening entry dialog — قيد افتتاحي */}
+        <Dialog open={openingDialog} onOpenChange={setOpeningDialog}>
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Wallet className="w-5 h-5 text-primary" /> قيد افتتاحي</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
               سجّل رصيداً افتتاحياً لعميل أو وكيل، ويظهر تلقائياً في كشف حسابه. القيمة الموجبة تعني أن عليه مبلغاً لك.
             </p>
-            <div className="rounded-lg border border-border p-4 max-w-xl space-y-4">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">النوع</label>
@@ -1006,17 +962,18 @@ export default function StatementPage() {
                   <Input type="number" value={openAmount} onChange={(e) => setOpenAmount(e.target.value)} placeholder="0" dir="ltr" />
                 </div>
               </div>
-              <Button
-                disabled={openingMut.isPending || !openName.trim() || openAmount === "" || isNaN(Number(openAmount))}
-                onClick={() => openingMut.mutate({ partyType: openType, name: openName.trim(), amount: Number(openAmount) })}
-              >
-                {openingMut.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-1.5" /> : <Plus className="w-4 h-4 ml-1.5" />}
-                حفظ القيد الافتتاحي
-              </Button>
-              <p className="text-xs text-muted-foreground">لحذف قيد افتتاحي، احفظه بمبلغ 0.</p>
-            </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  disabled={openingMut.isPending || !openName.trim() || openAmount === "" || isNaN(Number(openAmount))}
+                  onClick={() => openingMut.mutate({ partyType: openType, name: openName.trim(), amount: Number(openAmount) })}
+                >
+                  {openingMut.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-1.5" /> : <Plus className="w-4 h-4 ml-1.5" />}
+                  حفظ القيد الافتتاحي
+                </Button>
+                <p className="text-xs text-muted-foreground">لحذف قيد افتتاحي، احفظه بمبلغ 0.</p>
+              </div>
 
-            <div className="rounded-lg border border-border overflow-x-auto max-w-xl">
+              <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
@@ -1045,9 +1002,13 @@ export default function StatementPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpeningDialog(false)}>إغلاق</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Add/Edit agent dialog */}
         <Dialog
@@ -1327,14 +1288,24 @@ export default function StatementPage() {
             {detail?.ledger && (
               <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
                 <PrintWatermark logo={office?.officeLogo} />
-                <div className="relative space-y-4">
-                  <PrintHeader
-                    office={office}
-                    details={[
-                      { label: "التاريخ", value: La(todayISO()) },
-                      { label: "العملة", value: "ريال سعودي" },
-                    ]}
-                  />
+                <table className="w-full print-repeat-header relative border-collapse">
+                  <thead>
+                    <tr>
+                      <td className="pb-4">
+                        <PrintHeader
+                          office={office}
+                          details={[
+                            { label: "التاريخ", value: La(todayISO()) },
+                            { label: "العملة", value: "ريال سعودي" },
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div className="space-y-4">
                   {/* Statement title band */}
                   <div className="flex items-stretch gap-2">
                     <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
@@ -1348,7 +1319,7 @@ export default function StatementPage() {
                   </div>
                   <LedgerTable ledger={detail.ledger} />
                   {/* Signature & stamp */}
-                  <div className="flex justify-between pt-4 text-sm">
+                  <div className="flex justify-between items-end pt-4 text-sm">
                     <div className="text-center">
                       <div className="h-16 mb-1" />
                       <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع الوكيل</p>
@@ -1365,7 +1336,11 @@ export default function StatementPage() {
                       <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
                     </div>
                   </div>
-                </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
             <DialogFooter className="gap-2 no-print">
@@ -1525,14 +1500,24 @@ export default function StatementPage() {
             {clientDetail?.ledger && (
               <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
                 <PrintWatermark logo={office?.officeLogo} />
-                <div className="relative space-y-4">
-                  <PrintHeader
-                    office={office}
-                    details={[
-                      { label: "التاريخ", value: La(todayISO()) },
-                      { label: "العملة", value: "ريال سعودي" },
-                    ]}
-                  />
+                <table className="w-full print-repeat-header relative border-collapse">
+                  <thead>
+                    <tr>
+                      <td className="pb-4">
+                        <PrintHeader
+                          office={office}
+                          details={[
+                            { label: "التاريخ", value: La(todayISO()) },
+                            { label: "العملة", value: "ريال سعودي" },
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div className="space-y-4">
                   {/* Statement title band */}
                   <div className="flex items-stretch gap-2">
                     <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
@@ -1546,7 +1531,7 @@ export default function StatementPage() {
                   </div>
                   <LedgerTable ledger={clientDetail.ledger} />
                   {/* Signature & stamp */}
-                  <div className="flex justify-between pt-4 text-sm">
+                  <div className="flex justify-between items-end pt-4 text-sm">
                     <div className="text-center">
                       <div className="h-16 mb-1" />
                       <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع العميل</p>
@@ -1563,7 +1548,11 @@ export default function StatementPage() {
                       <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
                     </div>
                   </div>
-                </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
             <DialogFooter className="gap-2 no-print">
@@ -1606,46 +1595,21 @@ export default function StatementPage() {
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <p className="text-sm mb-1.5 font-medium">ربط بحساب وكيل (اختياري)</p>
-                <Select
-                  value={vAgent || "none"}
-                  onValueChange={(v) => {
-                    if (v === "none") {
-                      setVAgent("");
-                    } else {
-                      setVAgent(v);
-                      setVParty(v);
-                    }
-                  }}
-                >
+                <p className="text-sm mb-1.5 font-medium">الربط بحساب وكيل أو عميل</p>
+                <Select value={vLink || undefined} onValueChange={(v) => setVLink(v)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="بدون ربط" />
+                    <SelectValue placeholder="اختر وكيلاً أو عميلاً" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">بدون ربط</SelectItem>
                     {((agents as any[] | undefined) ?? []).map((a) => (
-                      <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+                      <SelectItem key={`agent-${a.id}`} value={`agent|${a.name}`}>وكيل — {a.name}</SelectItem>
+                    ))}
+                    {((clients as any[] | undefined) ?? []).map((c) => (
+                      <SelectItem key={`client-${c.clientName}`} value={`client|${c.clientName}`}>عميل — {c.clientName}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">عند الربط سيظهر السند في كشف حساب الوكيل</p>
-              </div>
-              <div>
-                <p className="text-sm mb-1.5 font-medium">اسم الطرف</p>
-                <Input
-                  list="voucher-party-list"
-                  value={vParty}
-                  onChange={(e) => {
-                    setVParty(e.target.value);
-                    if (vAgent && e.target.value.trim() !== vAgent) setVAgent("");
-                  }}
-                  placeholder="اسم الوكيل أو العميل أو الجهة"
-                />
-                <datalist id="voucher-party-list">
-                  {partyOptions.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
+                <p className="text-xs text-muted-foreground mt-1">سيظهر السند تلقائياً في كشف حساب الوكيل أو العميل المرتبط</p>
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">المبلغ</p>
@@ -1671,7 +1635,7 @@ export default function StatementPage() {
                 إلغاء
               </Button>
               <Button
-                disabled={!vParty.trim() || !Number(vAmount) || addVoucher.isPending}
+                disabled={!vLink || !Number(vAmount) || addVoucher.isPending}
                 onClick={() => addVoucher.mutate()}
               >
                 {addVoucher.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
@@ -1737,7 +1701,7 @@ export default function StatementPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between pt-6 text-sm">
+                <div className="flex justify-between items-end pt-6 text-sm">
                   <div className="text-center">
                     <div className="h-16 mb-1" />
                     <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المستلم</p>

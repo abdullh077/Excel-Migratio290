@@ -168,7 +168,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-white/70">مبالغ مستحقة (تأشيرات)</p>
                 <p className="mt-2 text-3xl font-bold text-amber-300" dir="ltr">{om(stats.visasTotalClientBalance)}</p>
                 <p className="mt-3 text-xs text-white/70">
-                  بواقي على الوكلاء: {om(stats.visasTotalAgentBalance)}
+                  باقي للوكلاء: {om(stats.visasTotalAgentBalance)}
                 </p>
               </div>
               <div className="rounded-xl bg-gradient-to-br from-accent to-primary p-3.5 text-white shadow-md ring-2 ring-primary/20">

@@ -12,3 +12,10 @@ Client balance = Σ(sale − receivedFromClient) + voucherPayments − voucherRe
 Only standalone client vouchers count: partyType <> 'agent' AND agent_payment_id IS NULL — agent-linked vouchers stay on the agent statement (double-count guard).
 Voucher-only party names do NOT create client rows in the list; they must match a transaction client or a manual client account.
 Ledger refs: V-/R- for transactions, S- for vouchers (receipt=credit, payment=debit).
+
+## تحديث 2026-08-02
+- إنشاء السند من الواجهة يتطلب الآن ربطاً بوكيل أو عميل (Select بصيغة "type|name")، حُذف حقل اسم الطرف الحر؛ الخلفية ما زالت تقبل partyType "other" للتوافق.
+- POST /vouchers في الخلفية يستدعي ensureAgent / ensureClientAccount حسب partyType — أي سند يُنشئ الحساب تلقائياً.
+- القيد الافتتاحي صار Dialog داخل تبويب السندات (لا تبويب مستقل).
+- عمود "المرجع" حُذف من LedgerTable وتصدير Excel.
+- الطباعة: @page A4، ترويسة المكتب تتكرر بكل صفحة عبر print-repeat-header (table/thead)، لا أشرطة تمرير في المطبوعات.

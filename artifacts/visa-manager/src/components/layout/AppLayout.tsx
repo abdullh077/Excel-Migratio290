@@ -31,7 +31,7 @@ interface NavItem {
 function buildNav(role: string | undefined): NavItem[] {
   const base: NavItem[] = [
     { href: "/", label: "لوحة القيادة", icon: LayoutDashboard },
-    { href: "/umrah", label: "عملاء العمرة", icon: Users },
+    { href: "/umrah", label: "تأشيرات العمرة", icon: Users },
     { href: "/visas", label: "تأشيرات أخرى", icon: FileText },
     { href: "/archive", label: "الأرشيف العام", icon: Archive },
     // كشف الحساب متاح لجميع مستخدمي المكتب (بما فيهم الحسابات الفرعية)
