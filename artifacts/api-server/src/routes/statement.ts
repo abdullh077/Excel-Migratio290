@@ -325,6 +325,47 @@ router.post("/statement/clients", async (req, res): Promise<void> => {
   res.status(201).json({ id: row.id, clientName: row.clientName, phone: row.phone, notes: row.notes });
 });
 
+// إعادة تسمية حساب عميل — تُحدِّث المعاملات والسندات المرتبطة بالاسم القديم
+router.put("/statement/clients/rename", async (req, res): Promise<void> => {
+  const officeId = req.session.officeId!;
+  const body = z.object({
+    oldName: z.string().trim().min(1),
+    newName: z.string().trim().min(1),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const { oldName, newName } = body.data;
+  if (oldName === newName) { res.json({ message: "No change" }); return; }
+
+  const [conflict] = await db.select({ id: clientAccountsTable.id }).from(clientAccountsTable)
+    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, newName)));
+  if (conflict) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
+
+  const [manual] = await db.update(clientAccountsTable).set({ clientName: newName })
+    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, oldName))).returning();
+  if (!manual) {
+    // لا صف يدوي — تأكد أن الاسم القديم موجود فعلاً في المعاملات أو السندات قبل الإنشاء
+    const [visaHit] = await db.select({ id: otherVisasTable.id }).from(otherVisasTable)
+      .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`)).limit(1);
+    const [umrahHit] = visaHit ? [visaHit] : await db.select({ id: umrahClientsTable.id }).from(umrahClientsTable)
+      .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.client, oldName))).limit(1);
+    const [voucherHit] = umrahHit ? [umrahHit] : await db.select({ id: vouchersTable.id }).from(vouchersTable)
+      .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), eq(vouchersTable.partyName, oldName))).limit(1);
+    if (!voucherHit) { res.status(404).json({ error: "لا يوجد حساب عميل بهذا الاسم" }); return; }
+    // حساب مُشتق من المعاملات فقط — أنشئ صفاً يدوياً بالاسم الجديد ليبقى الحساب ظاهراً
+    await db.insert(clientAccountsTable).values({ userId: officeId, clientName: newName, openingBalance: "0" });
+  }
+
+  // Re-tag transactions & vouchers so history follows the new name
+  await db.update(otherVisasTable).set({ client: newName })
+    .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`));
+  await db.update(umrahClientsTable).set({ client: newName })
+    .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.client, oldName)));
+  await db.update(vouchersTable).set({ partyName: newName })
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), eq(vouchersTable.partyName, oldName)));
+
+  res.json({ message: "Renamed" });
+});
+
 router.delete("/statement/clients/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }

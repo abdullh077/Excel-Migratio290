@@ -302,7 +302,10 @@ export default function StatementPage() {
   const [agentDialog, setAgentDialog] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [nameField, setNameField] = useState("");
-  const [phoneField, setPhoneField] = useState("");
+  // client account edit/delete
+  const [clientEditTarget, setClientEditTarget] = useState<any>(null);
+  const [clientNewName, setClientNewName] = useState("");
+  const [clientDeleteTarget, setClientDeleteTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -386,14 +389,13 @@ export default function StatementPage() {
   const saveAgent = useMutation({
     mutationFn: () =>
       editing
-        ? updateAgent(editing.id, { name: nameField.trim(), phone: phoneField.trim() })
-        : createAgent({ name: nameField.trim(), phone: phoneField.trim() || undefined }),
+        ? updateAgent(editing.id, { name: nameField.trim() })
+        : createAgent({ name: nameField.trim() }),
     onSuccess: () => {
       invalidateAll();
       setAgentDialog(false);
       setEditing(null);
       setNameField("");
-      setPhoneField("");
       toast({ title: editing ? "تم تعديل الوكيل" : "تم إضافة الوكيل" });
     },
     onError,
@@ -408,6 +410,39 @@ export default function StatementPage() {
     },
     onError: (e: any) => {
       setDeleteTarget(null);
+      onError(e);
+    },
+  });
+
+  const renameClient = useMutation({
+    mutationFn: () =>
+      fetch("/api/statement/clients/rename", {
+        method: "PUT",
+        credentials: "include",
+        headers: jsonHeaders,
+        body: JSON.stringify({ oldName: clientEditTarget?.clientName, newName: clientNewName.trim() }),
+      }).then(handle),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
+      qc.invalidateQueries({ queryKey: ["statement-client"] });
+      setClientEditTarget(null);
+      setClientNewName("");
+      toast({ title: "تم تعديل اسم العميل" });
+    },
+    onError,
+  });
+
+  const delClient = useMutation({
+    mutationFn: (id: number) =>
+      fetch(`/api/statement/clients/${id}`, { method: "DELETE", credentials: "include" }).then(handle),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+      setClientDeleteTarget(null);
+      toast({ title: "تم حذف حساب العميل" });
+    },
+    onError: (e: any) => {
+      setClientDeleteTarget(null);
       onError(e);
     },
   });
@@ -505,16 +540,9 @@ export default function StatementPage() {
     setVoucherDialog(true);
   };
 
-  const openNew = () => {
-    setEditing(null);
-    setNameField("");
-    setPhoneField("");
-    setAgentDialog(true);
-  };
   const openEdit = (a: any) => {
     setEditing(a);
     setNameField(a.name);
-    setPhoneField(a.phone ?? "");
     setAgentDialog(true);
   };
 
@@ -570,7 +598,6 @@ export default function StatementPage() {
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
                     <TableHead className="text-right">الوكيل</TableHead>
-                    <TableHead className="text-right">الهاتف</TableHead>
                     <TableHead className="text-right">المعاملات</TableHead>
                     <TableHead className="text-right">إجمالي البيع</TableHead>
                     <TableHead className="text-right">الربح</TableHead>
@@ -581,7 +608,7 @@ export default function StatementPage() {
                 <TableBody>
                   {agentsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-10">
+                      <TableCell colSpan={6} className="text-center py-10">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
                       </TableCell>
                     </TableRow>
@@ -589,7 +616,6 @@ export default function StatementPage() {
                     agents.filter((a: any) => !agentSearch.trim() || (a.name ?? "").includes(agentSearch.trim())).map((ie: any) => (
                       <TableRow key={ie.id} className="whitespace-nowrap hover:bg-muted/30">
                         <TableCell className="font-medium">{ie.name}</TableCell>
-                        <TableCell>{ie.phone || "-"}</TableCell>
                         <TableCell>{ie.transactions}</TableCell>
                         <TableCell>{nt(ie.totalSales)}</TableCell>
                         <TableCell className="text-emerald-600 font-medium">{nt(ie.profit)}</TableCell>
@@ -618,7 +644,7 @@ export default function StatementPage() {
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={7} icon={Users} title="لا يوجد وكلاء بعد" hint="أضف وكيلاً لبدء تتبع حساباته" />
+                    <EmptyRow colSpan={6} icon={Users} title="لا يوجد وكلاء بعد" hint="يُضاف الوكيل تلقائياً عند تسجيل معاملة باسمه" />
                   )}
                 </TableBody>
               </Table>
@@ -641,7 +667,6 @@ export default function StatementPage() {
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
                     <TableHead className="text-right">العميل</TableHead>
-                    <TableHead className="text-right">الهاتف</TableHead>
                     <TableHead className="text-right">المعاملات</TableHead>
                     <TableHead className="text-right">إجمالي البيع</TableHead>
                     <TableHead className="text-right">المقبوض</TableHead>
@@ -652,7 +677,7 @@ export default function StatementPage() {
                 <TableBody>
                   {clientsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-10">
+                      <TableCell colSpan={6} className="text-center py-10">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
                       </TableCell>
                     </TableRow>
@@ -664,7 +689,6 @@ export default function StatementPage() {
                         onClick={() => setSelectedClient(c.clientName)}
                       >
                         <TableCell className="font-medium">{c.clientName}</TableCell>
-                        <TableCell>{c.phone || "-"}</TableCell>
                         <TableCell>{c.txCount}</TableCell>
                         <TableCell>{nt(c.totalSales)}</TableCell>
                         <TableCell className="text-emerald-600 font-medium">{nt(c.totalReceived)}</TableCell>
@@ -672,14 +696,33 @@ export default function StatementPage() {
                           <ClientBalanceBadge balance={c.balance} />
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(c.clientName); }}>
-                            <FileText className="w-4 h-4 ml-1" /> كشف الحساب
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(c.clientName); }}>
+                              <FileText className="w-4 h-4 ml-1" /> كشف الحساب
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="تعديل"
+                              onClick={(e) => { e.stopPropagation(); setClientEditTarget(c); setClientNewName(c.clientName); }}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              aria-label="حذف"
+                              onClick={(e) => { e.stopPropagation(); setClientDeleteTarget(c); }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={7} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
+                    <EmptyRow colSpan={6} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
                   )}
                 </TableBody>
               </Table>
@@ -1026,10 +1069,6 @@ export default function StatementPage() {
                 <p className="text-sm mb-1.5 font-medium">اسم الوكيل</p>
                 <Input value={nameField} onChange={(e) => setNameField(e.target.value)} placeholder="مثال: وكيل صنعاء" />
               </div>
-              <div>
-                <p className="text-sm mb-1.5 font-medium">الهاتف (اختياري)</p>
-                <Input value={phoneField} onChange={(e) => setPhoneField(e.target.value)} placeholder="7xxxxxxxx" />
-              </div>
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setAgentDialog(false)}>
@@ -1064,6 +1103,74 @@ export default function StatementPage() {
                 variant="destructive"
                 disabled={delAgent.isPending}
                 onClick={() => deleteTarget && delAgent.mutate(deleteTarget.id)}
+              >
+                حذف
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit client dialog */}
+        <Dialog
+          open={!!clientEditTarget}
+          onOpenChange={(o) => {
+            if (!o) setClientEditTarget(null);
+          }}
+        >
+          <DialogContent className="max-w-sm" dir="rtl">
+            <DialogHeader>
+              <DialogTitle>تعديل العميل — {clientEditTarget?.clientName}</DialogTitle>
+            </DialogHeader>
+            <div>
+              <p className="text-sm mb-1.5 font-medium">اسم العميل</p>
+              <Input value={clientNewName} onChange={(e) => setClientNewName(e.target.value)} placeholder="اسم العميل" />
+              <p className="text-xs text-muted-foreground mt-1">سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.</p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setClientEditTarget(null)}>
+                إلغاء
+              </Button>
+              <Button
+                disabled={clientNewName.trim().length < 2 || renameClient.isPending}
+                onClick={() => renameClient.mutate()}
+              >
+                {renameClient.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete client dialog */}
+        <Dialog
+          open={!!clientDeleteTarget}
+          onOpenChange={(o) => {
+            if (!o) setClientDeleteTarget(null);
+          }}
+        >
+          <DialogContent className="max-w-sm" dir="rtl">
+            <DialogHeader>
+              <DialogTitle>حذف حساب العميل — {clientDeleteTarget?.clientName}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {clientDeleteTarget?.txCount
+                ? "هذا العميل لديه معاملات مسجلة — سيُحذف حسابه اليدوي فقط وتبقى معاملاته محفوظة باسمه."
+                : "سيُحذف حساب العميل من كشف الحساب."}
+            </p>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setClientDeleteTarget(null)}>
+                إلغاء
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={delClient.isPending}
+                onClick={() => {
+                  if (clientDeleteTarget?.manualId) {
+                    delClient.mutate(clientDeleteTarget.manualId);
+                  } else {
+                    setClientDeleteTarget(null);
+                    toast({ variant: "destructive", title: "لا يمكن الحذف", description: "هذا الحساب مُشتق من المعاملات المسجلة — احذف معاملاته أولاً." });
+                  }
+                }}
               >
                 حذف
               </Button>
