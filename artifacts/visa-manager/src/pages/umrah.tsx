@@ -315,7 +315,7 @@ export default function UmrahPage() {
 
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm whitespace-nowrap">
               <thead className="bg-muted/50 text-muted-foreground text-xs">
                 <tr>
                   <th className="px-3 py-3 text-right font-medium">م</th>

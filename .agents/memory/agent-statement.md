@@ -3,7 +3,8 @@ name: Agent accounts & statement (كشف الحساب)
 description: How agents/payments/ledger link to transactions and who can see them
 ---
 - Agents (agents table) link to transactions **by the text `agent` field** in umrah_clients/other_visas — no FK. Renaming an agent re-tags both tables to keep the link; deleting keeps transactions under the old name.
-- Balance convention: `balance = totalSales − paidFrom + paidTo`; positive = the agent owes the office ("عليه").
+- Balance convention (منذ 2026-08-03، حساب الوكيل صار على أساس الشراء لا البيع): `balance = opening + transferred + paidTo − totalPurchases − paidFrom`; موجب = عليه للمكتب، سالب = الباقي له. البيع والربح والعميل لا يظهرون في كشف الوكيل إطلاقاً؛ الوكيل لا يظهر في كشف العميل.
+- Name matching uses `btrim() = btrim()` in statement queries, and umrah/visas POST/PUT trim clientName/client/agent — stray spaces were silently dropping transactions from agent statements.
 - Financial endpoints (`/statement/*`) are owner+provider only (`requireOwner`); only `/statement/agent-names` is open to subs (`requireOffice`) for the datalist pickers in umrah/visas forms.
 - Ledger (ledger_entries) is general office income/expense; monthly summary joins tx months with ledger months (FULL OUTER JOIN on YYYY-MM).
 

@@ -599,9 +599,9 @@ export default function StatementPage() {
                   <TableRow className="whitespace-nowrap">
                     <TableHead className="text-right">الوكيل</TableHead>
                     <TableHead className="text-right">المعاملات</TableHead>
-                    <TableHead className="text-right">إجمالي البيع</TableHead>
-                    <TableHead className="text-right">الربح</TableHead>
-                    <TableHead className="text-right">الرصيد</TableHead>
+                    <TableHead className="text-right">إجمالي الشراء</TableHead>
+                    <TableHead className="text-right">محول للوكيل</TableHead>
+                    <TableHead className="text-right">الباقي</TableHead>
                     <TableHead className="text-right">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -617,8 +617,8 @@ export default function StatementPage() {
                       <TableRow key={ie.id} className="whitespace-nowrap hover:bg-muted/30">
                         <TableCell className="font-medium">{ie.name}</TableCell>
                         <TableCell>{ie.transactions}</TableCell>
-                        <TableCell>{nt(ie.totalSales)}</TableCell>
-                        <TableCell className="text-emerald-600 font-medium">{nt(ie.profit)}</TableCell>
+                        <TableCell>{nt(ie.totalPurchases)}</TableCell>
+                        <TableCell>{nt(ie.transferred)}</TableCell>
                         <TableCell>
                           <BalanceBadge balance={ie.balance} />
                         </TableCell>
@@ -1209,15 +1209,15 @@ export default function StatementPage() {
                     <p className="font-bold text-lg">{detail.totals.count}</p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">إجمالي البيع</p>
-                    <p className="font-bold text-lg">{nt(detail.totals.totalSales)}</p>
+                    <p className="text-xs text-muted-foreground">إجمالي الشراء</p>
+                    <p className="font-bold text-lg">{nt(detail.totals.totalPurchases)}</p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">قبضنا منه</p>
-                    <p className="font-bold text-lg">{nt(detail.totals.paidFrom)}</p>
+                    <p className="text-xs text-muted-foreground">محول للوكيل</p>
+                    <p className="font-bold text-lg">{nt(detail.totals.transferred)}</p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">الرصيد</p>
+                    <p className="text-xs text-muted-foreground">الباقي</p>
                     <BalanceBadge balance={detail.totals.balance} />
                   </div>
                 </div>
@@ -1303,10 +1303,9 @@ export default function StatementPage() {
                         <TableRow className="whitespace-nowrap">
                           <TableHead className="text-right">التاريخ</TableHead>
                           <TableHead className="text-right">النوع</TableHead>
-                          <TableHead className="text-right">العميل</TableHead>
-                          <TableHead className="text-right">البيع</TableHead>
+                          <TableHead className="text-right">اسم الجواز</TableHead>
                           <TableHead className="text-right">الشراء</TableHead>
-                          <TableHead className="text-right">الربح</TableHead>
+                          <TableHead className="text-right">محول للوكيل</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1320,14 +1319,13 @@ export default function StatementPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell>{ie.clientName}</TableCell>
-                              <TableCell>{nt(ie.sale)}</TableCell>
                               <TableCell>{nt(ie.purchase)}</TableCell>
-                              <TableCell className="text-emerald-600 font-medium">{nt(ie.sale - ie.purchase)}</TableCell>
+                              <TableCell>{nt(ie.transferred)}</TableCell>
                             </TableRow>
                           ))
                         ) : (
                           <EmptyRow
-                            colSpan={6}
+                            colSpan={5}
                             icon={Users}
                             title="لا توجد معاملات لهذا الوكيل"
                             hint="اختر اسمه في حقل الوكيل عند إضافة معاملة"
@@ -1797,7 +1795,7 @@ export default function StatementPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-[hsl(220,40%,18%)]">المبلغ:</span>
                   <span className="border-2 border-[hsl(43,65%,52%)] bg-[hsl(43,65%,52%)]/10 text-[hsl(220,40%,18%)] rounded px-4 py-2 font-bold text-lg">
-                    {nt(Number(printVoucher.amount))}
+                    {nt(Number(printVoucher.amount))} ريال سعودي
                   </span>
                 </div>
 

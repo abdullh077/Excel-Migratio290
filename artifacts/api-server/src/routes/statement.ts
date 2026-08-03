@@ -29,19 +29,24 @@ router.use("/statement/summary", requireOffice);
 router.use("/statement/opening", requireOffice);
 
 async function computeAgentBalance(officeId: number, agentId: number, agentName: string, openingBalance = 0) {
-  const [salesRow] = await db
+  // الوكيل مورد: يُحسب حسابه على أساس الشراء (ما ندين له به) — البيع والربح لا يظهران في كشفه.
+  // المطابقة بالاسم مع تجاهل الفراغات الطرفية حتى لا تسقط معاملات كُتب اسم الوكيل فيها بمسافة زائدة.
+  const [purchRow] = await db
     .select({
-      total: sql<number>`coalesce(sum(${umrahClientsTable.salePrice}),0)::float`,
-      profit: sql<number>`coalesce(sum(${umrahClientsTable.salePrice} - ${umrahClientsTable.purchasePrice}),0)::float`,
+      total: sql<number>`coalesce(sum(${umrahClientsTable.purchasePrice}),0)::float`,
       count: sql<number>`count(*)::int`,
     })
     .from(umrahClientsTable)
-    .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agentName)));
+    .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${agentName})`));
 
-  const [salesRow2] = await db
-    .select({ total: sql<number>`coalesce(sum(${otherVisasTable.salePrice}),0)::float`, profit: sql<number>`coalesce(sum(${otherVisasTable.salePrice} - ${otherVisasTable.purchasePrice}),0)::float`, count: sql<number>`count(*)::int` })
+  const [purchRow2] = await db
+    .select({
+      total: sql<number>`coalesce(sum(${otherVisasTable.purchasePrice}),0)::float`,
+      transferred: sql<number>`coalesce(sum(${otherVisasTable.transferredToAgent}),0)::float`,
+      count: sql<number>`count(*)::int`,
+    })
     .from(otherVisasTable)
-    .where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agentName)));
+    .where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${agentName})`));
 
   const [payRow] = await db
     .select({
@@ -59,15 +64,16 @@ async function computeAgentBalance(officeId: number, agentId: number, agentName:
       payments: sql<number>`coalesce(sum(case when kind='payment' then amount::float else 0 end),0)::float`,
     })
     .from(vouchersTable)
-    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, agentName), isNull(vouchersTable.agentPaymentId)));
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${agentName})`, isNull(vouchersTable.agentPaymentId)));
 
-  const totalSales = (salesRow.total ?? 0) + (salesRow2.total ?? 0);
+  const totalPurchases = (purchRow.total ?? 0) + (purchRow2.total ?? 0);
+  const transferred = purchRow2.transferred ?? 0;
   const paidFrom = (payRow.paidFrom ?? 0) + (voucherRow.receipts ?? 0);
   const paidTo = (payRow.paidTo ?? 0) + (voucherRow.payments ?? 0);
-  const balance = openingBalance + totalSales - paidFrom + paidTo;
-  const profit = (salesRow.profit ?? 0) + (salesRow2.profit ?? 0);
-  const txCount = (salesRow.count ?? 0) + (salesRow2.count ?? 0);
-  return { totalSales, paidFrom, paidTo, balance, profit, txCount, transactions: txCount };
+  // موجب = عليه (للمكتب)، سالب = له (الباقي للوكيل).
+  const balance = openingBalance + transferred + paidTo - totalPurchases - paidFrom;
+  const txCount = (purchRow.count ?? 0) + (purchRow2.count ?? 0);
+  return { totalPurchases, transferred, paidFrom, paidTo, balance, txCount, transactions: txCount };
 }
 
 router.get("/statement/agents", async (req, res): Promise<void> => {
@@ -86,7 +92,7 @@ router.post("/statement/agents", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
   const [row] = await db.insert(agentsTable).values({ ...parsed.data, userId: officeId }).returning();
-  res.status(201).json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, totalSales: 0, paidFrom: 0, paidTo: 0, balance: 0, txCount: 0, createdAt: row.createdAt.toISOString() });
+  res.status(201).json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, totalPurchases: 0, transferred: 0, paidFrom: 0, paidTo: 0, balance: 0, txCount: 0, createdAt: row.createdAt.toISOString() });
 });
 
 router.put("/statement/agents/:id", async (req, res): Promise<void> => {
@@ -136,19 +142,19 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   const agentOpening = Number(agent.openingBalance) || 0;
   const bal = await computeAgentBalance(officeId, agent.id, agent.name, agentOpening);
 
-  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, client: umrahClientsTable.client, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
-  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, client: otherVisasTable.client, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, purchasePrice: otherVisasTable.purchasePrice, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
+  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${agent.name})`));
+  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, purchasePrice: otherVisasTable.purchasePrice, transferredToAgent: otherVisasTable.transferredToAgent, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${agent.name})`));
 
   const transactions = [
-    ...umrahTx.map((r) => ({ id: `u-${r.id}`, kind: "umrah", clientName: r.clientName, date: r.issueDate, sale: Number(r.salePrice), purchase: Number(r.purchasePrice), createdAt: r.createdAt.toISOString() })),
-    ...visaTx.map((r) => ({ id: `v-${r.id}`, kind: "visa", clientName: r.clientName, date: r.issueDate, sale: Number(r.salePrice), purchase: Number(r.purchasePrice), createdAt: r.createdAt.toISOString() })),
+    ...umrahTx.map((r) => ({ id: `u-${r.id}`, kind: "umrah", clientName: r.clientName, date: r.issueDate, purchase: Number(r.purchasePrice), transferred: 0, createdAt: r.createdAt.toISOString() })),
+    ...visaTx.map((r) => ({ id: `v-${r.id}`, kind: "visa", clientName: r.clientName, date: r.issueDate, purchase: Number(r.purchasePrice), transferred: Number(r.transferredToAgent) || 0, createdAt: r.createdAt.toISOString() })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const payments = await db.select().from(agentPaymentsTable).where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agent.id))).orderBy(agentPaymentsTable.paidAt);
 
   // Standalone agent vouchers (not linked to agent payments) appear as movements.
   const agentVouchers = await db.select().from(vouchersTable)
-    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, agent.name), isNull(vouchersTable.agentPaymentId)))
+    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${agent.name})`, isNull(vouchersTable.agentPaymentId)))
     .orderBy(vouchersTable.voucherDate);
 
   // ---- Ledger view (كشف حساب تفصيلي): merged debit/credit movements ----
@@ -160,13 +166,18 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
   };
   type LedgerRow = { ref: string; kind: string; date: string; sortKey: number; description: string; debit: number; credit: number };
   const movements: LedgerRow[] = [
+    // حساب الوكيل على أساس الشراء: قيمة الشراء دائن (له)، والمحول له مدين (عليه).
     ...umrahTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})${r.client ? ` — العميل: ${r.client}` : ""}`, debit: Number(r.salePrice) || 0, credit: 0 };
+      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `لكم قيمة شراء تأشيرة عمرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
     }),
     ...visaTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `عليكم مقابل تأشيرة باسم (${r.clientName})${r.client ? ` — العميل: ${r.client}` : ""}`, debit: Number(r.salePrice) || 0, credit: 0 };
+      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `لكم قيمة شراء تأشيرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
+    }),
+    ...visaTx.filter((r) => (Number(r.transferredToAgent) || 0) > 0).map((r) => {
+      const dt = toDate(r.issueDate) ?? r.createdAt;
+      return { ref: `T-${r.id}`, kind: "محول للوكيل", date: dt.toISOString(), sortKey: dt.getTime() + 1, description: `عليكم مبلغ محول لكم عن تأشيرة باسم (${r.clientName})`, debit: Number(r.transferredToAgent) || 0, credit: 0 };
     }),
     ...payments.map((p) => {
       const amount = Number(p.amount) || 0;
@@ -217,7 +228,7 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
 
   res.json({
     agent: { id: agent.id, name: agent.name, phone: agent.phone },
-    totals: { count: bal.txCount, totalSales: bal.totalSales, paidFrom: bal.paidFrom, paidTo: bal.paidTo, balance: bal.balance },
+    totals: { count: bal.txCount, totalPurchases: bal.totalPurchases, transferred: bal.transferred, paidFrom: bal.paidFrom, paidTo: bal.paidTo, balance: bal.balance },
     payments: payments.map((p) => ({ id: p.id, amount: Number(p.amount), direction: p.direction, paidAt: p.paidAt.toISOString(), notes: p.notes })),
     transactions,
     ledger: {
@@ -239,12 +250,12 @@ router.get("/statement/agents/:id/details", async (req, res): Promise<void> => {
 
   const bal = await computeAgentBalance(officeId, agent.id, agent.name, Number(agent.openingBalance) || 0);
 
-  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, salePrice: umrahClientsTable.salePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, agent.name)));
-  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, salePrice: otherVisasTable.salePrice, receivedFromClient: otherVisasTable.receivedFromClient, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, agent.name)));
+  const umrahTx = await db.select({ id: umrahClientsTable.id, clientName: umrahClientsTable.clientName, issueDate: umrahClientsTable.issueDate, purchasePrice: umrahClientsTable.purchasePrice, createdAt: umrahClientsTable.createdAt }).from(umrahClientsTable).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${agent.name})`));
+  const visaTx = await db.select({ id: otherVisasTable.id, clientName: otherVisasTable.clientName, issueDate: otherVisasTable.issueDate, purchasePrice: otherVisasTable.purchasePrice, transferredToAgent: otherVisasTable.transferredToAgent, createdAt: otherVisasTable.createdAt }).from(otherVisasTable).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${agent.name})`));
 
   const transactions = [
-    ...umrahTx.map((r) => ({ id: r.id, clientName: r.clientName, type: "عمرة", issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: null, createdAt: r.createdAt.toISOString() })),
-    ...visaTx.map((r) => ({ id: r.id, clientName: r.clientName, type: "تأشيرة", issueDate: r.issueDate, salePrice: Number(r.salePrice), receivedFromClient: Number(r.receivedFromClient), createdAt: r.createdAt.toISOString() })),
+    ...umrahTx.map((r) => ({ id: r.id, clientName: r.clientName, type: "عمرة", issueDate: r.issueDate, purchasePrice: Number(r.purchasePrice), transferredToAgent: 0, createdAt: r.createdAt.toISOString() })),
+    ...visaTx.map((r) => ({ id: r.id, clientName: r.clientName, type: "تأشيرة", issueDate: r.issueDate, purchasePrice: Number(r.purchasePrice), transferredToAgent: Number(r.transferredToAgent) || 0, createdAt: r.createdAt.toISOString() })),
   ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const payments = await db.select().from(agentPaymentsTable).where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agent.id))).orderBy(agentPaymentsTable.paidAt);
@@ -520,7 +531,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         kind: r.visaType || "تأشيرة",
         date: dt.toISOString(),
         sortKey: dt.getTime(),
-        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})${r.agent ? ` — الوكيل: ${r.agent}` : ""}`,
+        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
         debit: Number(r.salePrice) || 0,
         credit: 0,
       }];
@@ -545,7 +556,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         kind: "عمرة",
         date: dt.toISOString(),
         sortKey: dt.getTime(),
-        description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})${r.agent ? ` — الوكيل: ${r.agent}` : ""}`,
+        description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})`,
         debit: Number(r.salePrice) || 0,
         credit: 0,
       };

@@ -74,6 +74,9 @@ router.post("/visas", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
   const { clientRequestId: rawRequestId, openingBalance, ...rest } = parsed.data as any;
+  // Normalize name fields so statement matching (by name) never misses a
+  // transaction because of stray leading/trailing spaces.
+  for (const k of ["clientName", "client", "agent"]) if (typeof rest[k] === "string") rest[k] = rest[k].trim();
   await ensureClientAccount(officeId, rest.client, openingBalance);
   await ensureAgent(officeId, rest.agent);
   // Normalize empty/blank clientRequestId to null so it never collides on the
@@ -109,6 +112,7 @@ router.put("/visas/:id", async (req, res): Promise<void> => {
   if (values.clientRequestId !== undefined) delete values.clientRequestId;
   const openingBalance = values.openingBalance as number | undefined;
   delete values.openingBalance;
+  for (const k of ["clientName", "client", "agent"]) if (typeof values[k] === "string") values[k] = (values[k] as string).trim();
   await ensureClientAccount(req.session.officeId!, values.client as string | undefined, openingBalance);
   await ensureAgent(req.session.officeId!, values.agent as string | undefined);
   if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }

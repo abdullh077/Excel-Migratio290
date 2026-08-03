@@ -64,7 +64,8 @@ export default function ReceiptPage() {
 
   const backHref = isUmrah ? "/umrah" : "/visas";
   const receiptId = "#" + String(record.id).padStart(6, "0");
-  const title = "سند قبض " + (isUmrah ? "(عمرة)" : "(تأشيرة)");
+  const title = "إشعار " + (isUmrah ? "(عمرة)" : "(تأشيرة)");
+  const visaTypeLabel = isUmrah ? "عمرة" : (record?.visaType || "—");
 
   const transaction = isUmrah ? "تأشيرة عمرة" : (record.visaType || "—");
   const paid = isUmrah ? record.salePrice : record.receivedFromClient;
@@ -118,10 +119,11 @@ export default function ReceiptPage() {
 
           {/* Client fields */}
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <Field label="اسم العميل" value={record.clientName} />
+            <Field label="اسم الجواز" value={record.clientName} />
             <Field label="رقم الجوال" value={record.phone} ltr />
             <Field label="رقم الجواز" value={record.passportNumber} ltr />
-            <Field label="الوكيل" value={record.agent} />
+            <Field label="اسم العميل" value={record.client} />
+            <Field label="نوع التأشيرة" value={visaTypeLabel} />
           </div>
 
           {/* Transactions table */}
@@ -150,7 +152,7 @@ export default function ReceiptPage() {
           {/* Total */}
           <div className="flex justify-end mb-6">
             <div className="text-base font-bold">
-              الإجمالي: <span dir="ltr">{fmt(total)}</span>
+              الإجمالي: <span dir="ltr">{fmt(total)}</span> ريال سعودي
             </div>
           </div>
 
