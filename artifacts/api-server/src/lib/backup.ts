@@ -172,7 +172,7 @@ export async function restoreOfficeFromPayload(officeId: number, payload: any) {
   });
 }
 
-export async function restoreFromBackupPayload(payload: any, requesterId: number) {
+export function assertBackupPayload(payload: any): void {
   if (!payload || payload.version !== 2 || typeof payload.data !== "object" || payload.data === null) {
     throw Object.assign(new Error("Invalid backup payload"), { status: 400 });
   }
@@ -181,6 +181,11 @@ export async function restoreFromBackupPayload(payload: any, requesterId: number
   for (const k of arrays) {
     if (!Array.isArray(data[k])) throw Object.assign(new Error(`Invalid backup payload: missing ${k}`), { status: 400 });
   }
+}
+
+export async function restoreFromBackupPayload(payload: any, requesterId: number) {
+  assertBackupPayload(payload);
+  const data = payload.data;
 
   await db.transaction(async (tx) => {
     // --- 1. Users ---

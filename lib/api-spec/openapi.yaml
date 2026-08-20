@@ -1031,7 +1031,7 @@ components:
 
     AgentAccount:
       type: object
-      required: [id, name, totalSales, paidFrom, paidTo, balance, txCount, createdAt]
+      required: [id, name, openingBalance, totalPurchases, transferred, paidFrom, paidTo, balance, txCount, createdAt]
       properties:
         id:
           type: integer
@@ -1041,7 +1041,11 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
-        totalSales:
+        openingBalance:
+          type: number
+        totalPurchases:
+          type: number
+        transferred:
           type: number
         paidFrom:
           type: number
@@ -1260,7 +1264,7 @@ components:
 
     UmrahClient:
       type: object
-      required: [id, clientName, passportNumber, phone, agent, issueDate, stayDuration, issuingAuthority, purchasePrice, salePrice, profit, sendStatus, status, createdAt]
+      required: [id, clientName, passportNumber, phone, agent, issueDate, stayDuration, purchasePrice, salePrice, profit, sendStatus, status, createdAt]
       properties:
         id:
           type: integer
@@ -1278,6 +1282,10 @@ components:
           type: integer
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:
@@ -1299,7 +1307,7 @@ components:
 
     UmrahClientInput:
       type: object
-      required: [clientName, passportNumber, phone, agent, issueDate, stayDuration, issuingAuthority, purchasePrice, salePrice, sendStatus]
+      required: [clientName, passportNumber, phone, agent, issueDate, stayDuration, purchasePrice, salePrice, sendStatus]
       properties:
         clientName:
           type: string
@@ -1315,6 +1323,10 @@ components:
           type: integer
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:
@@ -1347,6 +1359,10 @@ components:
           type: integer
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:
@@ -1362,7 +1378,7 @@ components:
 
     OtherVisa:
       type: object
-      required: [id, clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, issuingAuthority, purchasePrice, salePrice, receivedFromClient, clientBalance, transferredToAgent, agentBalance, profit, createdAt]
+      required: [id, clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, purchasePrice, salePrice, receivedFromClient, clientBalance, transferredToAgent, agentBalance, profit, createdAt]
       properties:
         id:
           type: integer
@@ -1382,6 +1398,10 @@ components:
           type: string
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:
@@ -1407,7 +1427,7 @@ components:
 
     OtherVisaInput:
       type: object
-      required: [clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, issuingAuthority, purchasePrice, salePrice, receivedFromClient, transferredToAgent]
+      required: [clientName, passportNumber, requestNumber, phone, agent, issueDate, visaType, purchasePrice, salePrice, receivedFromClient, transferredToAgent]
       properties:
         clientName:
           type: string
@@ -1425,6 +1445,10 @@ components:
           type: string
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:
@@ -1461,6 +1485,10 @@ components:
           type: string
         issuingAuthority:
           type: string
+        client:
+          type: string
+        openingBalance:
+          type: number
         purchasePrice:
           type: number
         salePrice:

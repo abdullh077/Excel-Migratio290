@@ -19,3 +19,4 @@
 - [Original bundle recovery](original-bundle-recovery.md) — visa-manager UI/API contract restored verbatim from production bundle; specs in .recovery/specs/ are source of truth; plain fetch, not orval.
 - [Oboor print & backup conventions](oboor-print-backup-conventions.md) — unified PrintHeader on all printables; disabled-sub enforcement in 3 places; DB backups + advisory-lock daily job; no nested dialog scroll.
 - [api-server rebuild 2026-08](api-server-rebuild-2026-08.md) — full rebuild: auth, umrah, visas, dashboard, archive, settings, provider, statement, vouchers routes; dist/ compiled; needs workflow registration to go live in dev.
+- [OpenAPI contract regeneration](openapi-contract-regeneration.md) — update the source spec for every live field before codegen; stale schemas can silently strip valid request fields.

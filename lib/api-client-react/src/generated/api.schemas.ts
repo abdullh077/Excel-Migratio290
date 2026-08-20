@@ -44,12 +44,12 @@ export interface Account {
   createdAt: string;
 }
 
-export type AccountInputRole =
-  (typeof AccountInputRole)[keyof typeof AccountInputRole];
+export type AccountInputRole = typeof AccountInputRole[keyof typeof AccountInputRole];
+
 
 export const AccountInputRole = {
-  owner: "owner",
-  sub: "sub",
+  owner: 'owner',
+  sub: 'sub',
 } as const;
 
 export interface AccountInput {
@@ -81,7 +81,9 @@ export interface AgentAccount {
   phone?: string | null;
   /** @nullable */
   notes?: string | null;
-  totalSales: number;
+  openingBalance: number;
+  totalPurchases: number;
+  transferred: number;
   paidFrom: number;
   paidTo: number;
   balance: number;
@@ -108,12 +110,12 @@ export interface AgentPayment {
   createdAt: string;
 }
 
-export type AgentPaymentInputDirection =
-  (typeof AgentPaymentInputDirection)[keyof typeof AgentPaymentInputDirection];
+export type AgentPaymentInputDirection = typeof AgentPaymentInputDirection[keyof typeof AgentPaymentInputDirection];
+
 
 export const AgentPaymentInputDirection = {
-  from_agent: "from_agent",
-  to_agent: "to_agent",
+  from_agent: 'from_agent',
+  to_agent: 'to_agent',
 } as const;
 
 export interface AgentPaymentInput {
@@ -181,12 +183,12 @@ export interface LedgerEntry {
   createdAt: string;
 }
 
-export type LedgerEntryInputType =
-  (typeof LedgerEntryInputType)[keyof typeof LedgerEntryInputType];
+export type LedgerEntryInputType = typeof LedgerEntryInputType[keyof typeof LedgerEntryInputType];
+
 
 export const LedgerEntryInputType = {
-  income: "income",
-  expense: "expense",
+  income: 'income',
+  expense: 'expense',
 } as const;
 
 export interface LedgerEntryInput {
@@ -203,21 +205,21 @@ export interface StatementMonth {
   net: number;
 }
 
-export type VoucherInputKind =
-  (typeof VoucherInputKind)[keyof typeof VoucherInputKind];
+export type VoucherInputKind = typeof VoucherInputKind[keyof typeof VoucherInputKind];
+
 
 export const VoucherInputKind = {
-  receipt: "receipt",
-  payment: "payment",
+  receipt: 'receipt',
+  payment: 'payment',
 } as const;
 
-export type VoucherInputPartyType =
-  (typeof VoucherInputPartyType)[keyof typeof VoucherInputPartyType];
+export type VoucherInputPartyType = typeof VoucherInputPartyType[keyof typeof VoucherInputPartyType];
+
 
 export const VoucherInputPartyType = {
-  agent: "agent",
-  client: "client",
-  other: "other",
+  agent: 'agent',
+  client: 'client',
+  other: 'other',
 } as const;
 
 export interface VoucherInput {
@@ -237,10 +239,11 @@ export interface UmrahClient {
   agent: string;
   issueDate: string;
   stayDuration: number;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
   salePrice: number;
-  receivedFromClient?: number | null;
   profit: number;
   sendStatus: string;
   status: string;
@@ -260,9 +263,10 @@ export interface UmrahClientInput {
   agent: string;
   issueDate: string;
   stayDuration: number;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
-  receivedFromClient?: number;
   salePrice: number;
   sendStatus: string;
   transactionParty?: string;
@@ -279,7 +283,8 @@ export interface UmrahClientUpdate {
   issueDate?: string;
   stayDuration?: number;
   issuingAuthority?: string;
-  receivedFromClient?: number;
+  client?: string;
+  openingBalance?: number;
   purchasePrice?: number;
   salePrice?: number;
   sendStatus?: string;
@@ -297,7 +302,9 @@ export interface OtherVisa {
   agent: string;
   issueDate: string;
   visaType: string;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
   salePrice: number;
   receivedFromClient: number;
@@ -321,7 +328,9 @@ export interface OtherVisaInput {
   agent: string;
   issueDate: string;
   visaType: string;
-  issuingAuthority: string;
+  issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice: number;
   salePrice: number;
   receivedFromClient: number;
@@ -341,6 +350,8 @@ export interface OtherVisaUpdate {
   issueDate?: string;
   visaType?: string;
   issuingAuthority?: string;
+  client?: string;
+  openingBalance?: number;
   purchasePrice?: number;
   salePrice?: number;
   receivedFromClient?: number;
@@ -448,37 +459,37 @@ export interface OfficeSettingsUpdate {
 }
 
 export type GetClientDetailsParams = {
-  name: string;
+name: string;
 };
 
 export type ListVouchersParams = {
-  kind?: string;
-  party?: string;
+kind?: string;
+party?: string;
 };
 
 export type ListUmrahClientsParams = {
-  search?: string;
-  status?: string;
-  agent?: string;
-  month?: number;
-  year?: number;
+search?: string;
+status?: string;
+agent?: string;
+month?: number;
+year?: number;
 };
 
 export type ListVisasParams = {
-  search?: string;
-  visaType?: string;
-  agent?: string;
-  month?: number;
-  year?: number;
+search?: string;
+visaType?: string;
+agent?: string;
+month?: number;
+year?: number;
 };
 
 export type GetMonthlyStatsParams = {
-  year?: number;
+year?: number;
 };
 
 export type ListArchiveParams = {
-  search?: string;
-  visaType?: string;
-  month?: number;
-  year?: number;
+search?: string;
+visaType?: string;
+month?: number;
+year?: number;
 };

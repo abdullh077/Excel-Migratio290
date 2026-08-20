@@ -13,7 +13,9 @@ export interface AgentAccount {
   phone?: string | null;
   /** @nullable */
   notes?: string | null;
-  totalSales: number;
+  openingBalance: number;
+  totalPurchases: number;
+  transferred: number;
   paidFrom: number;
   paidTo: number;
   balance: number;

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, usersTable, officeSettingsTable, backupsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireProvider } from "../lib/auth.js";
-import { createBackup, restoreFromBackupPayload } from "../lib/backup.js";
+import { assertBackupPayload, createBackup, restoreFromBackupPayload } from "../lib/backup.js";
 import { addMonthsClamped } from "../lib/dates.js";
 import {
   CreateAccountBody,
@@ -19,6 +19,41 @@ import {
 
 const router = Router();
 router.use("/provider", requireProvider);
+
+const isManagedAccount = (role: string) => role === "owner" || role === "sub";
+
+async function getManagedAccount(id: number) {
+  if (!Number.isInteger(id)) return null;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  return user && isManagedAccount(user.role) ? user : null;
+}
+
+async function usernameIsAvailable(username: string, exceptId?: number): Promise<boolean> {
+  const [existing] = await db.select({ id: usersTable.id }).from(usersTable)
+    .where(eq(usersTable.username, username));
+  return !existing || existing.id === exceptId;
+}
+
+function parseOptionalDate(value: string | null | undefined): Date | null | "invalid" {
+  if (value == null || value === "") return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]);
+    const day = Number(dateOnly[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year
+      || date.getUTCMonth() !== month - 1
+      || date.getUTCDate() !== day
+    ) {
+      return "invalid";
+    }
+    return date;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "invalid" : date;
+}
 
 // Provider changes their own login credentials. This route never accepts a
 // user id, so a provider cannot use it to modify another account.
@@ -79,7 +114,8 @@ router.patch("/provider/credentials", async (req, res): Promise<void> => {
 });
 
 router.get("/provider/accounts", async (req, res): Promise<void> => {
-  const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);
+  const users = (await db.select().from(usersTable).orderBy(usersTable.createdAt))
+    .filter((user) => isManagedAccount(user.role));
   const settings = await db.select({ userId: officeSettingsTable.userId, officeName: officeSettingsTable.officeName }).from(officeSettingsTable);
   const settingsMap = new Map(settings.map((s) => [s.userId, s.officeName]));
 
@@ -102,15 +138,28 @@ router.post("/provider/accounts", async (req, res): Promise<void> => {
   const parsed = CreateAccountBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { username, password, role, parentUserId, expiresAt } = parsed.data as any;
+  const { password, role, parentUserId, expiresAt } = parsed.data as any;
+  const username = String(parsed.data.username).trim();
+  if (!username) { res.status(400).json({ error: "اسم المستخدم مطلوب" }); return; }
+  if (password.length < 6) { res.status(400).json({ error: "كلمة المرور يجب ألا تقل عن 6 أحرف" }); return; }
+  if (!(await usernameIsAvailable(username))) { res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
+  const expiry = parseOptionalDate(expiresAt);
+  if (expiry === "invalid") { res.status(400).json({ error: "تاريخ الانتهاء غير صحيح" }); return; }
+  if (role === "owner" && parentUserId != null) {
+    res.status(400).json({ error: "الحساب الرئيسي لا يتبع حساباً آخر" }); return;
+  }
+  if (role === "sub") {
+    const parent = await getManagedAccount(parentUserId);
+    if (!parent || parent.role !== "owner") { res.status(400).json({ error: "الحساب الرئيسي غير صالح" }); return; }
+  }
   const passwordHash = await bcrypt.hash(password, 10);
 
   const [user] = await db.insert(usersTable).values({
     username,
     passwordHash,
-    role: role ?? "owner",
-    parentUserId: parentUserId ?? null,
-    expiresAt: expiresAt ? new Date(expiresAt) : null,
+    role,
+    parentUserId: role === "sub" ? parentUserId : null,
+    expiresAt: expiry,
   }).returning();
 
   res.status(201).json({
@@ -123,8 +172,18 @@ router.post("/provider/accounts", async (req, res): Promise<void> => {
 router.delete("/provider/accounts/:id", async (req, res): Promise<void> => {
   const params = DeleteAccountParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [user] = await db.delete(usersTable).where(eq(usersTable.id, params.data.id)).returning();
+  const user = await getManagedAccount(params.data.id);
   if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  if (user.role === "owner") {
+    const children = await db.select({ id: usersTable.id }).from(usersTable)
+      .where(eq(usersTable.parentUserId, user.id))
+      .limit(1);
+    if (children.length) {
+      res.status(409).json({ error: "احذف الحسابات الفرعية التابعة لهذا المكتب أولاً" });
+      return;
+    }
+  }
+  await db.delete(usersTable).where(eq(usersTable.id, user.id));
   res.json({ message: "Deleted" });
 });
 
@@ -134,10 +193,13 @@ router.patch("/provider/accounts/:id/expiry", async (req, res): Promise<void> =>
   const parsed = UpdateAccountExpiryBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const expiresAt = (parsed.data as any).expiresAt ? new Date((parsed.data as any).expiresAt) : null;
+  const target = await getManagedAccount(params.data.id);
+  if (!target || target.role !== "owner") { res.status(404).json({ error: "Not found" }); return; }
+  const expiresAt = parseOptionalDate((parsed.data as any).expiresAt);
+  if (expiresAt === "invalid") { res.status(400).json({ error: "تاريخ الانتهاء غير صحيح" }); return; }
   // Explicitly setting an expiry (or unlimited) supersedes any not-yet-started pending months.
-  const [user] = await db.update(usersTable).set({ expiresAt, pendingMonths: null }).where(eq(usersTable.id, params.data.id)).returning();
-  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  const [user] = await db.update(usersTable).set({ expiresAt, pendingMonths: null }).where(eq(usersTable.id, target.id)).returning();
+  await db.update(usersTable).set({ expiresAt }).where(eq(usersTable.parentUserId, target.id));
   res.json({ id: user.id, username: user.username, role: user.role, parentUserId: user.parentUserId, expiresAt: user.expiresAt ? user.expiresAt.toISOString() : null, officeName: null, createdAt: user.createdAt.toISOString() });
 });
 
@@ -146,10 +208,12 @@ router.patch("/provider/accounts/:id/password", async (req, res): Promise<void> 
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateAccountPasswordBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (parsed.data.password.length < 6) { res.status(400).json({ error: "كلمة المرور يجب ألا تقل عن 6 أحرف" }); return; }
+  const target = await getManagedAccount(params.data.id);
+  if (!target) { res.status(404).json({ error: "Not found" }); return; }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  const [user] = await db.update(usersTable).set({ passwordHash, failedAttempts: 0, lockedUntil: null }).where(eq(usersTable.id, params.data.id)).returning();
-  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  await db.update(usersTable).set({ passwordHash, failedAttempts: 0, lockedUntil: null, credentialsChangedAt: new Date() }).where(eq(usersTable.id, target.id));
   res.json({ message: "Password updated" });
 });
 
@@ -158,17 +222,21 @@ router.patch("/provider/accounts/:id/username", async (req, res): Promise<void> 
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateAccountUsernameBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const target = await getManagedAccount(params.data.id);
+  if (!target) { res.status(404).json({ error: "Not found" }); return; }
+  const username = parsed.data.username.trim();
+  if (!username) { res.status(400).json({ error: "اسم المستخدم مطلوب" }); return; }
+  if (!(await usernameIsAvailable(username, target.id))) { res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
 
-  const [user] = await db.update(usersTable).set({ username: parsed.data.username }).where(eq(usersTable.id, params.data.id)).returning();
-  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+  await db.update(usersTable).set({ username, credentialsChangedAt: new Date() }).where(eq(usersTable.id, target.id));
   res.json({ message: "Username updated" });
 });
 
 // --- Create-account aliases matching the frontend payloads ---
 
 const CreateOwnerBody = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
+  username: z.string().trim().min(1),
+  password: z.string().min(6, "كلمة المرور يجب ألا تقل عن 6 أحرف"),
   expiresAt: z.string().nullish(),
   months: z.number().int().min(1).max(60).nullish(),
   officeName: z.string().trim().nullish(),
@@ -178,6 +246,9 @@ router.post("/provider/owners", async (req, res): Promise<void> => {
   const parsed = CreateOwnerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { username, password, expiresAt, months, officeName } = parsed.data;
+  if (!(await usernameIsAvailable(username))) { res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
+  const expiry = parseOptionalDate(expiresAt);
+  if (expiry === "invalid") { res.status(400).json({ error: "تاريخ الانتهاء غير صحيح" }); return; }
   const passwordHash = await bcrypt.hash(password, 10);
   // Month-based subscriptions do NOT start at creation: the countdown begins
   // at the owner's first login (pendingMonths → expiresAt in auth/login).
@@ -187,7 +258,7 @@ router.post("/provider/owners", async (req, res): Promise<void> => {
     passwordHash,
     role: "owner",
     parentUserId: null,
-    expiresAt: months ? null : expiresAt ? new Date(expiresAt) : null,
+    expiresAt: months ? null : expiry,
     pendingMonths: months ?? null,
     providerLabel: officeName ?? null,
   }).returning();
@@ -214,11 +285,12 @@ router.patch("/provider/accounts/:id/office-name", async (req, res): Promise<voi
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const body = z.object({ officeName: z.string().trim().min(1) }).safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const target = await getManagedAccount(id);
+  if (!target || target.role !== "owner") { res.status(404).json({ error: "Not found" }); return; }
 
   const [user] = await db.update(usersTable)
     .set({ providerLabel: body.data.officeName })
-    .where(eq(usersTable.id, id)).returning();
-  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+    .where(eq(usersTable.id, target.id)).returning();
   res.json({ message: "Updated", officeName: body.data.officeName });
 });
 
@@ -229,12 +301,9 @@ router.post("/provider/accounts/:id/renew", async (req, res): Promise<void> => {
   const body = z.object({ months: z.number().int().min(1).max(60) }).safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-  if (!user) { res.status(404).json({ error: "Not found" }); return; }
-  // Renewal always applies to the owner account (subs inherit it).
-  const ownerId = user.parentUserId ?? user.id;
-  const [owner] = await db.select().from(usersTable).where(eq(usersTable.id, ownerId));
-  if (!owner) { res.status(404).json({ error: "Owner not found" }); return; }
+  const owner = await getManagedAccount(id);
+  if (!owner || owner.role !== "owner") { res.status(404).json({ error: "Not found" }); return; }
+  const ownerId = owner.id;
 
   // Owner never logged in yet (countdown not started): add months to the pending balance.
   if (owner.pendingMonths != null && owner.expiresAt == null) {
@@ -255,8 +324,8 @@ router.post("/provider/accounts/:id/renew", async (req, res): Promise<void> => {
 });
 
 const CreateSubBody = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
+  username: z.string().trim().min(1),
+  password: z.string().min(6, "كلمة المرور يجب ألا تقل عن 6 أحرف"),
   parentId: z.number().optional(),
   parentUsername: z.string().optional(),
   expiresAt: z.string().nullish(),
@@ -268,6 +337,9 @@ router.post("/provider/subs", async (req, res): Promise<void> => {
   const parsed = CreateSubBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { username, password, parentId, parentUsername, expiresAt } = parsed.data;
+  if (!(await usernameIsAvailable(username))) { res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
+  const expiry = parseOptionalDate(expiresAt);
+  if (expiry === "invalid") { res.status(400).json({ error: "تاريخ الانتهاء غير صحيح" }); return; }
 
   let parent;
   if (parentId != null) {
@@ -285,7 +357,7 @@ router.post("/provider/subs", async (req, res): Promise<void> => {
     role: "sub",
     parentUserId: parent.id,
     // subs inherit the owner's window; store the provided/owner expiry for reference
-    expiresAt: expiresAt ? new Date(expiresAt) : (parent.expiresAt ?? null),
+    expiresAt: expiry ?? (parent.expiresAt ?? null),
   }).returning();
 
   const [settings] = await db.select({ officeName: officeSettingsTable.officeName }).from(officeSettingsTable).where(eq(officeSettingsTable.userId, parent.id));
@@ -330,6 +402,12 @@ router.post("/provider/backups/:id/restore", async (req, res): Promise<void> => 
   const [row] = await db.select().from(backupsTable).where(eq(backupsTable.id, id));
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
 
+  try {
+    assertBackupPayload(row.data);
+  } catch (err: any) {
+    res.status(err?.status ?? 400).json({ error: err?.message ?? "النسخة الاحتياطية غير صالحة" });
+    return;
+  }
   const safety = await createBackup("manual"); // safety snapshot of the current state
   try {
     await restoreFromBackupPayload(row.data, (req.session as any).userId);
@@ -343,6 +421,12 @@ router.post("/provider/backups/:id/restore", async (req, res): Promise<void> => 
 // Restore from an uploaded backup .json file (sent as parsed JSON body).
 router.post("/provider/restore-upload", async (req, res): Promise<void> => {
   const payload = req.body?.payload ?? req.body;
+  try {
+    assertBackupPayload(payload);
+  } catch (err: any) {
+    res.status(err?.status ?? 400).json({ error: err?.message ?? "النسخة الاحتياطية غير صالحة" });
+    return;
+  }
   const safety = await createBackup("manual");
   try {
     await restoreFromBackupPayload(payload, (req.session as any).userId);

@@ -390,31 +390,3 @@
     overflow: visible !important;
   }
 }
-@media print {
-  /* إخفاء الأزرار والأسهم والشريط الجانبي أثناء الطباعة */
-  button, .no-print, nav, aside, ::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  /* إغلاق التمرير وإظهار الصفحات والمعاملات كاملة */
-  body, html, main, table, div {
-    overflow: visible !important;
-    height: auto !important;
-    max-height: none !important;
-    background: #fff !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-
-  /* ضبط كشف الحساب على مقاس A4 وتنسيق الهامش */
-  @page {
-    size: A4 portrait;
-    margin: 12mm;
-  }
-
-  /* منع قص التوقيعات والتذييل في أسفل الصفحة */
-  .statement-footer, footer {
-    page-break-inside: avoid;
-    margin-top: 20px;
-  }
-}

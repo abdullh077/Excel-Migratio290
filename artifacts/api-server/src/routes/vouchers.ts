@@ -29,10 +29,12 @@ router.post("/vouchers", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
   const { voucherDate, ...rest } = parsed.data as any;
+  const date = voucherDate ? new Date(voucherDate) : new Date();
+  if (Number.isNaN(date.getTime())) { res.status(400).json({ error: "تاريخ السند غير صحيح" }); return; }
   // ضمان الترابط: أي سند مرتبط بوكيل أو عميل يُنشئ حسابه تلقائياً إن لم يوجد
   if (rest.partyType === "agent") await ensureAgent(officeId, rest.partyName);
   if (rest.partyType === "client") await ensureClientAccount(officeId, rest.partyName, undefined);
-  const [row] = await db.insert(vouchersTable).values({ ...rest, userId: officeId, voucherDate: voucherDate ? new Date(voucherDate) : new Date() }).returning();
+  const [row] = await db.insert(vouchersTable).values({ ...rest, userId: officeId, voucherDate: date }).returning();
   res.status(201).json(toVoucher(row));
 });
 

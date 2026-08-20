@@ -112,10 +112,10 @@ router.put("/statement/agents/:id", async (req, res): Promise<void> => {
 
   // Re-tag transactions if name changed
   if (newName && newName !== oldName) {
-    await db.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.agent, oldName)));
-    await db.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), eq(otherVisasTable.agent, oldName)));
+    await db.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${oldName})`));
+    await db.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${oldName})`));
     // Standalone agent vouchers link by name too — keep them attached after rename.
-    await db.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), eq(vouchersTable.partyName, oldName)));
+    await db.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`));
   }
 
   const bal = await computeAgentBalance(officeId, row.id, row.name, Number(row.openingBalance) || 0);
@@ -505,7 +505,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
 
   // Manual client account (holds the opening balance, if any).
   const [account] = await db.select().from(clientAccountsTable)
-    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, name)));
+    .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${name})`));
   const openingBalance = Number(account?.openingBalance) || 0;
   // Standalone client vouchers only — agent vouchers and vouchers linked to
   // agent payments belong to the agent statement (avoids double counting).
