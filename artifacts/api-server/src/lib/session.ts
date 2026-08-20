@@ -12,7 +12,7 @@ export const sessionMiddleware = session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "lax" : "lax",

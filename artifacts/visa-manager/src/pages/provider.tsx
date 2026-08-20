@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup, RefreshCw, Building2, History, Upload } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useGetMe } from "@/hooks/useAuth";
 
 const ACCOUNTS_KEY = ["/api/provider/accounts"];
 const BACKUPS_KEY = ["/api/provider/backups"];
@@ -40,8 +41,9 @@ async function patchJson(url: string, body: any) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(String(res.status));
-  return res.json();
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error || String(res.status));
+  return payload;
 }
 
 async function del(url: string) {
@@ -53,6 +55,7 @@ async function del(url: string) {
 export default function ProviderPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { data: me } = useGetMe();
   const { data: accounts = [] } = useQuery({ queryKey: ACCOUNTS_KEY, queryFn: () => fetchJson("/api/provider/accounts") });
 
   const owners = accounts.filter((a: any) => a.role === "owner");
@@ -74,6 +77,18 @@ export default function ProviderPage() {
   const [subForm, setSubForm] = useState({ parentUserId: "", username: "", password: "", customDate: false });
   const [renameVal, setRenameVal] = useState("");
   const [pwdVal, setPwdVal] = useState("");
+  const [providerCredentials, setProviderCredentials] = useState({
+    username: "",
+    currentPassword: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  useEffect(() => {
+    if (me?.username && !providerCredentials.username) {
+      setProviderCredentials((form) => ({ ...form, username: me.username }));
+    }
+  }, [me?.username, providerCredentials.username]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ACCOUNTS_KEY });
 
@@ -138,6 +153,27 @@ export default function ProviderPage() {
     onSuccess: () => { setPwdId(null); setPwdVal(""); toast({ title: "تم تغيير كلمة المرور" }); },
   });
 
+  const providerCredentialsMut = useMutation({
+    mutationFn: () => patchJson("/api/provider/credentials", {
+      currentPassword: providerCredentials.currentPassword,
+      username: providerCredentials.username.trim() || undefined,
+      password: providerCredentials.password || undefined,
+    }),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setProviderCredentials({
+        username: updated.username,
+        currentPassword: "",
+        password: "",
+        confirmPassword: "",
+      });
+      toast({ title: "تم تحديث بيانات دخول المزود" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "تعذّر تحديث بيانات الدخول", description: error.message, variant: "destructive" });
+    },
+  });
+
   const deleteMut = useMutation({
     mutationFn: () => del(`/api/provider/accounts/${deleteId}`),
     onSuccess: () => { invalidate(); setDeleteId(null); },
@@ -199,6 +235,84 @@ export default function ProviderPage() {
     <AppLayout>
       <div className="p-6" dir="rtl">
         <h1 className="text-xl font-bold mb-6">إدارة المزوّد</h1>
+
+        <Card className="p-5 mb-6">
+          <div className="mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" /> بيانات دخول المزود
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              عدّل اسم المستخدم أو كلمة المرور الخاصة بحساب المزود. يجب إدخال كلمة المرور الحالية للتأكيد.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>اسم المستخدم الجديد</Label>
+              <Input
+                value={providerCredentials.username}
+                onChange={(e) => setProviderCredentials((form) => ({ ...form, username: e.target.value }))}
+                dir="ltr"
+                className="text-left"
+                autoComplete="username"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>كلمة المرور الحالية <span className="text-destructive">*</span></Label>
+              <Input
+                type="password"
+                value={providerCredentials.currentPassword}
+                onChange={(e) => setProviderCredentials((form) => ({ ...form, currentPassword: e.target.value }))}
+                dir="ltr"
+                className="text-left"
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>كلمة المرور الجديدة (اختياري)</Label>
+              <Input
+                type="password"
+                value={providerCredentials.password}
+                onChange={(e) => setProviderCredentials((form) => ({ ...form, password: e.target.value }))}
+                dir="ltr"
+                className="text-left"
+                autoComplete="new-password"
+                placeholder="6 أحرف على الأقل"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>تأكيد كلمة المرور الجديدة</Label>
+              <Input
+                type="password"
+                value={providerCredentials.confirmPassword}
+                onChange={(e) => setProviderCredentials((form) => ({ ...form, confirmPassword: e.target.value }))}
+                dir="ltr"
+                className="text-left"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+          {providerCredentials.password &&
+            providerCredentials.confirmPassword &&
+            providerCredentials.password !== providerCredentials.confirmPassword && (
+              <p className="text-sm text-destructive mt-3">كلمتا المرور غير متطابقتين.</p>
+            )}
+          <div className="flex justify-end mt-4">
+            <Button
+              onClick={() => providerCredentialsMut.mutate()}
+              disabled={
+                providerCredentialsMut.isPending ||
+                !providerCredentials.currentPassword ||
+                !providerCredentials.username.trim() ||
+                (providerCredentials.username.trim() === me?.username && !providerCredentials.password) ||
+                (!!providerCredentials.password &&
+                  (providerCredentials.password.length < 6 ||
+                    providerCredentials.password !== providerCredentials.confirmPassword))
+              }
+            >
+              {providerCredentialsMut.isPending ? "جارٍ الحفظ..." : "حفظ بيانات الدخول"}
+            </Button>
+          </div>
+        </Card>
 
         <Tabs defaultValue="owners">
           <TabsList>

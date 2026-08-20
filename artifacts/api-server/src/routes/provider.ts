@@ -20,6 +20,64 @@ import {
 const router = Router();
 router.use("/provider", requireProvider);
 
+// Provider changes their own login credentials. This route never accepts a
+// user id, so a provider cannot use it to modify another account.
+router.patch("/provider/credentials", async (req, res): Promise<void> => {
+  const parsed = z.object({
+    currentPassword: z.string().min(1),
+    username: z.string().trim().min(1).optional(),
+    password: z.string().min(6, "كلمة المرور يجب ألا تقل عن 6 أحرف").optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? parsed.error.message });
+    return;
+  }
+  const [me] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
+  if (!me || me.role !== "provider" && me.role !== "admin") {
+    res.status(404).json({ error: "الحساب غير موجود" });
+    return;
+  }
+
+  const currentPasswordMatches = await bcrypt.compare(parsed.data.currentPassword, me.passwordHash);
+  if (!currentPasswordMatches) {
+    res.status(403).json({ error: "كلمة المرور الحالية غير صحيحة" });
+    return;
+  }
+
+  const username = parsed.data.username;
+  if ((!username || username === me.username) && !parsed.data.password) {
+    res.status(400).json({ error: "لم يتم إدخال أي تغيير" });
+    return;
+  }
+  if (username && username !== me.username) {
+    const [duplicate] = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.username, username));
+    if (duplicate && duplicate.id !== me.id) {
+      res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" });
+      return;
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    credentialsChangedAt: new Date(),
+    failedAttempts: 0,
+    lockedUntil: null,
+  };
+  if (username) updates.username = username;
+  if (parsed.data.password) updates.passwordHash = await bcrypt.hash(parsed.data.password, 10);
+
+  const [updated] = await db.update(usersTable)
+    .set(updates)
+    .where(eq(usersTable.id, me.id))
+    .returning({ username: usersTable.username, credentialsChangedAt: usersTable.credentialsChangedAt });
+
+  res.json({
+    username: updated.username,
+    credentialsChangedAt: updated.credentialsChangedAt?.toISOString() ?? null,
+  });
+});
+
 router.get("/provider/accounts", async (req, res): Promise<void> => {
   const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);
   const settings = await db.select({ userId: officeSettingsTable.userId, officeName: officeSettingsTable.officeName }).from(officeSettingsTable);

@@ -5,10 +5,45 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Users, TrendingUp, BarChart3, Plus, Loader2, FileText, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Receipt, Printer, FileSpreadsheet, Search } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  Users,
+  TrendingUp,
+  BarChart3,
+  Plus,
+  Loader2,
+  FileText,
+  Pencil,
+  Trash2,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  Wallet,
+  Receipt,
+  Printer,
+  FileSpreadsheet,
+  Search,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
@@ -31,7 +66,11 @@ function La(e: string | null | undefined): string {
   try {
     const t = new Date(e);
     if (isNaN(t.getTime())) return e;
-    return t.toLocaleDateString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric" });
+    return t.toLocaleDateString("ar-SA-u-ca-gregory", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
   } catch {
     return e;
   }
@@ -47,47 +86,101 @@ const OFFICE_KEY = ["settings-office"];
 const jsonHeaders = { "Content-Type": "application/json" };
 
 // API helpers (exact endpoints/payloads)
-const listAgents = () => fetch("/api/statement/agents", { credentials: "include" }).then(handle);
+const listAgents = () =>
+  fetch("/api/statement/agents", { credentials: "include" }).then(handle);
 const createAgent = (body: any) =>
-  fetch("/api/statement/agents", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+  fetch("/api/statement/agents", {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const updateAgent = (id: any, body: any) =>
-  fetch(`/api/statement/agents/${id}`, { method: "PUT", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+  fetch(`/api/statement/agents/${id}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const deleteAgent = (id: any) =>
-  fetch(`/api/statement/agents/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
+  fetch(`/api/statement/agents/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  }).then(handle);
 const getAgent = (id: any, from?: string, to?: string) => {
   const qs = new URLSearchParams();
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   const s = qs.toString();
-  return fetch(`/api/statement/agents/${id}${s ? `?${s}` : ""}`, { credentials: "include" }).then(handle);
+  return fetch(`/api/statement/agents/${id}${s ? `?${s}` : ""}`, {
+    credentials: "include",
+  }).then(handle);
 };
 const createPayment = (id: any, body: any) =>
-  fetch(`/api/statement/agents/${id}/payments`, { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+  fetch(`/api/statement/agents/${id}/payments`, {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const deletePayment = (id: any) =>
-  fetch(`/api/statement/payments/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
-const listLedger = () => fetch("/api/statement/ledger", { credentials: "include" }).then(handle);
+  fetch(`/api/statement/payments/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  }).then(handle);
+const listLedger = () =>
+  fetch("/api/statement/ledger", { credentials: "include" }).then(handle);
 const createLedger = (body: any) =>
-  fetch("/api/statement/ledger", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+  fetch("/api/statement/ledger", {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const deleteLedger = (id: any) =>
-  fetch(`/api/statement/ledger/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
-const getSummary = () => fetch("/api/statement/summary", { credentials: "include" }).then(handle);
-const listClients = () => fetch("/api/statement/clients", { credentials: "include" }).then(handle);
+  fetch(`/api/statement/ledger/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  }).then(handle);
+const getSummary = () =>
+  fetch("/api/statement/summary", { credentials: "include" }).then(handle);
+const listClients = () =>
+  fetch("/api/statement/clients", { credentials: "include" }).then(handle);
 const getClientDetails = (name: string, from?: string, to?: string) => {
   const qs = new URLSearchParams({ name });
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
-  return fetch(`/api/statement/clients/details?${qs.toString()}`, { credentials: "include" }).then(handle);
+  return fetch(`/api/statement/clients/details?${qs.toString()}`, {
+    credentials: "include",
+  }).then(handle);
 };
-const listVouchers = () => fetch("/api/vouchers", { credentials: "include" }).then(handle);
+const listVouchers = () =>
+  fetch("/api/vouchers", { credentials: "include" }).then(handle);
 const createVoucher = (body: any) =>
-  fetch("/api/vouchers", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
+  fetch("/api/vouchers", {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const deleteVoucher = (id: any) =>
-  fetch(`/api/vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(handle);
-const getOffice = () => fetch("/api/settings/office", { credentials: "include" }).then(handle);
-const listOpening = () => fetch("/api/statement/opening", { credentials: "include" }).then(handle);
+  fetch(`/api/vouchers/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  }).then(handle);
+const getOffice = () =>
+  fetch("/api/settings/office", { credentials: "include" }).then(handle);
+const listOpening = () =>
+  fetch("/api/statement/opening", { credentials: "include" }).then(handle);
 const saveOpening = (body: any) =>
-  fetch("/api/statement/opening", { method: "POST", credentials: "include", headers: jsonHeaders, body: JSON.stringify(body) }).then(handle);
-const listAgentNames = () => fetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
+  fetch("/api/statement/opening", {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
+const listAgentNames = () =>
+  fetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
 
 async function handle(res: Response) {
   if (!res.ok) {
@@ -145,13 +238,38 @@ function BalanceBadge({ balance }: { balance: number }) {
 }
 
 // Export ledger statement to an RTL xlsx file (same columns as LedgerTable, with opening row and totals)
-function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: string, entity: "agent" | "client" = "agent") {
+function exportLedgerXlsx(
+  ledger: any,
+  agentName: string,
+  from?: string,
+  to?: string,
+  entity: "agent" | "client" = "agent",
+) {
   const opening = Number(ledger?.opening) || 0;
   let run = opening;
-  const balLabel = (v: number) => (v > 0 ? `${Math.abs(v)} (عليه)` : v < 0 ? `${Math.abs(v)} (له)` : "0 (مسدَّد)");
-  const header = ["نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"];
+  const balLabel = (v: number) =>
+    v > 0
+      ? `${Math.abs(v)} (عليه)`
+      : v < 0
+        ? `${Math.abs(v)} (له)`
+        : "0 (مسدَّد)";
+  const header = [
+    "نوع الحركة",
+    "التاريخ",
+    "البيان",
+    "مدين (عليه)",
+    "دائن (له)",
+    "الرصيد بعد العملية",
+  ];
   const rows: any[][] = [
-    ["الرصيد الافتتاحي", ledger?.from ? La(ledger.from) : "—", "رصيد ما قبل الفترة", "", "", balLabel(opening)],
+    [
+      "الرصيد الافتتاحي",
+      ledger?.from ? La(ledger.from) : "—",
+      "رصيد ما قبل الفترة",
+      "",
+      "",
+      balLabel(opening),
+    ],
   ];
   let totalDebit = 0;
   let totalCredit = 0;
@@ -161,14 +279,25 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
     run += debit - credit;
     totalDebit += debit;
     totalCredit += credit;
-    rows.push([e.kind, La(e.date), e.description, debit || "", credit || "", balLabel(run)]);
+    rows.push([
+      e.kind,
+      La(e.date),
+      e.description,
+      debit || "",
+      credit || "",
+      balLabel(run),
+    ]);
   }
   const final = opening + totalDebit - totalCredit;
   rows.push(["", "", "الإجمالي", totalDebit, totalCredit, balLabel(final)]);
   rows.push([
     "",
     "",
-    final > 0 ? `عليكم مبلغ ${nt(final)}` : final < 0 ? `لكم مبلغ ${nt(-final)}` : "الرصيد مسدَّد بالكامل — لا مستحقات",
+    final > 0
+      ? `عليكم مبلغ ${nt(final)}`
+      : final < 0
+        ? `لكم مبلغ ${nt(-final)}`
+        : "الرصيد مسدَّد بالكامل — لا مستحقات",
     "",
     "",
     "العملة: ريال سعودي",
@@ -179,7 +308,14 @@ function exportLedgerXlsx(ledger: any, agentName: string, from?: string, to?: st
       ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
       : "عن كامل الفترة حتى تاريخه";
   const ws = XLSX.utils.aoa_to_sheet([[title], [period], [], header, ...rows]);
-  ws["!cols"] = [{ wch: 16 }, { wch: 18 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
+  ws["!cols"] = [
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 45 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 22 },
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب");
   if (!wb.Workbook) wb.Workbook = {};
@@ -196,73 +332,146 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
     run += (Number(e.debit) || 0) - (Number(e.credit) || 0);
     return { ...e, after: run };
   });
-  const totalDebit = rows.reduce((s: number, r: any) => s + (Number(r.debit) || 0), 0);
-  const totalCredit = rows.reduce((s: number, r: any) => s + (Number(r.credit) || 0), 0);
+  const totalDebit = rows.reduce(
+    (s: number, r: any) => s + (Number(r.debit) || 0),
+    0,
+  );
+  const totalCredit = rows.reduce(
+    (s: number, r: any) => s + (Number(r.credit) || 0),
+    0,
+  );
   const final = opening + totalDebit - totalCredit;
   const navy = "hsl(220,40%,18%)";
   const gold = "hsl(43,65%,52%)";
   const money = (v: number) => (v ? nt(v) : "—");
   const balCell = (v: number) => (
-    <span className={v > 0 ? "text-red-700 font-semibold" : v < 0 ? "text-emerald-700 font-semibold" : "font-semibold"}>
-      {nt(Math.abs(v))}{v > 0 ? " (عليه)" : v < 0 ? " (له)" : ""}
+    <span
+      className={
+        v > 0
+          ? "text-red-700 font-semibold"
+          : v < 0
+            ? "text-emerald-700 font-semibold"
+            : "font-semibold"
+      }
+    >
+      {nt(Math.abs(v))}
+      {v > 0 ? " (عليه)" : v < 0 ? " (له)" : ""}
     </span>
   );
   return (
-    <div className={compact ? "overflow-x-auto" : "overflow-x-auto rounded-md border-2" } style={compact ? undefined : { borderColor: navy }}>
+    <div
+      className={
+        compact ? "overflow-x-auto" : "overflow-x-auto rounded-md border-2"
+      }
+      style={compact ? undefined : { borderColor: navy }}
+    >
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="text-white whitespace-nowrap" style={{ background: navy }}>
-            {["نوع الحركة", "التاريخ", "البيان", "مدين (عليه)", "دائن (له)", "الرصيد بعد العملية"].map((h) => (
-              <th key={h} className="px-3 py-2 text-right font-bold border" style={{ borderColor: gold }}>{h}</th>
+          <tr
+            className="text-white whitespace-nowrap"
+            style={{ background: navy }}
+          >
+            {[
+              "نوع الحركة",
+              "التاريخ",
+              "البيان",
+              "مدين (عليه)",
+              "دائن (له)",
+              "الرصيد بعد العملية",
+            ].map((h) => (
+              <th
+                key={h}
+                className="px-3 py-2 text-right font-bold border"
+                style={{ borderColor: gold }}
+              >
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           <tr className="whitespace-nowrap bg-[hsl(43,65%,52%)]/10">
-            <td className="px-3 py-2 border border-border font-semibold">الرصيد الافتتاحي</td>
-            <td className="px-3 py-2 border border-border">{ledger.from ? La(ledger.from) : "—"}</td>
-            <td className="px-3 py-2 border border-border">رصيد ما قبل الفترة</td>
+            <td className="px-3 py-2 border border-border font-semibold">
+              الرصيد الافتتاحي
+            </td>
+            <td className="px-3 py-2 border border-border">
+              {ledger.from ? La(ledger.from) : "—"}
+            </td>
+            <td className="px-3 py-2 border border-border">
+              رصيد ما قبل الفترة
+            </td>
             <td className="px-3 py-2 border border-border">—</td>
             <td className="px-3 py-2 border border-border">—</td>
-            <td className="px-3 py-2 border border-border">{balCell(opening)}</td>
+            <td className="px-3 py-2 border border-border">
+              {balCell(opening)}
+            </td>
           </tr>
           {rows.length ? (
             rows.map((r: any) => (
               <tr key={r.ref} className="whitespace-nowrap odd:bg-muted/20">
                 <td className="px-3 py-2 border border-border">{r.kind}</td>
                 <td className="px-3 py-2 border border-border">{La(r.date)}</td>
-                <td className="px-3 py-2 border border-border whitespace-normal min-w-48">{r.description}</td>
-                <td className="px-3 py-2 border border-border">{money(Number(r.debit))}</td>
-                <td className="px-3 py-2 border border-border">{money(Number(r.credit))}</td>
-                <td className="px-3 py-2 border border-border">{balCell(r.after)}</td>
+                <td className="px-3 py-2 border border-border whitespace-normal min-w-48">
+                  {r.description}
+                </td>
+                <td className="px-3 py-2 border border-border">
+                  {money(Number(r.debit))}
+                </td>
+                <td className="px-3 py-2 border border-border">
+                  {money(Number(r.credit))}
+                </td>
+                <td className="px-3 py-2 border border-border">
+                  {balCell(r.after)}
+                </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground border border-border">
+              <td
+                colSpan={6}
+                className="px-3 py-6 text-center text-muted-foreground border border-border"
+              >
                 لا توجد حركات خلال هذه الفترة
               </td>
             </tr>
           )}
-          <tr className="whitespace-nowrap font-bold" style={{ background: "hsl(43,65%,52%,0.25)" }}>
-            <td colSpan={3} className="px-3 py-2 border text-right" style={{ borderColor: navy }}>الإجمالي</td>
-            <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalDebit)}</td>
-            <td className="px-3 py-2 border" style={{ borderColor: navy }}>{nt(totalCredit)}</td>
+          <tr
+            className="whitespace-nowrap font-bold"
+            style={{ background: "hsl(43,65%,52%,0.25)" }}
+          >
+            <td
+              colSpan={3}
+              className="px-3 py-2 border text-right"
+              style={{ borderColor: navy }}
+            >
+              الإجمالي
+            </td>
             <td className="px-3 py-2 border" style={{ borderColor: navy }}>
-              <span className={`inline-block rounded px-3 py-0.5 text-white ${final > 0 ? "bg-red-700" : final < 0 ? "bg-emerald-700" : "bg-slate-600"}`}>
+              {nt(totalDebit)}
+            </td>
+            <td className="px-3 py-2 border" style={{ borderColor: navy }}>
+              {nt(totalCredit)}
+            </td>
+            <td className="px-3 py-2 border" style={{ borderColor: navy }}>
+              <span
+                className={`inline-block rounded px-3 py-0.5 text-white ${final > 0 ? "bg-red-700" : final < 0 ? "bg-emerald-700" : "bg-slate-600"}`}
+              >
                 {final > 0 ? "مدين" : final < 0 ? "دائن" : "مسدَّد"}
               </span>
             </td>
           </tr>
         </tbody>
       </table>
-      <div className="px-3 py-2 text-center font-semibold border-t" style={{ borderColor: navy }}>
+      <div
+        className="px-3 py-2 text-center font-semibold border-t"
+        style={{ borderColor: navy }}
+      >
         {final > 0
           ? `عليكم مبلغ ${nt(final)}`
           : final < 0
             ? `لكم مبلغ ${nt(-final)}`
-            : "الرصيد مسدَّد بالكامل — لا مستحقات"}
-        {" "}— العملة: ريال سعودي
+            : "الرصيد مسدَّد بالكامل — لا مستحقات"}{" "}
+        — العملة: ريال سعودي
       </div>
     </div>
   );
@@ -323,7 +532,9 @@ export default function StatementPage() {
 
   // vouchers tab
   const [voucherDialog, setVoucherDialog] = useState(false);
-  const [voucherKind, setVoucherKind] = useState<"receipt" | "payment">("receipt");
+  const [voucherKind, setVoucherKind] = useState<"receipt" | "payment">(
+    "receipt",
+  );
   const [vAmount, setVAmount] = useState("");
   const [vDesc, setVDesc] = useState("");
   const [vDate, setVDate] = useState(todayISO());
@@ -344,24 +555,54 @@ export default function StatementPage() {
   const [agentSearch, setAgentSearch] = useState("");
   const [clientSearch, setClientSearch] = useState("");
 
-  const { data: agents, isLoading: agentsLoading } = useQuery({ queryKey: AGENTS_KEY, queryFn: listAgents });
-  const { data: ledger, isLoading: ledgerLoading } = useQuery({ queryKey: LEDGER_KEY, queryFn: listLedger });
-  const { data: summary, isLoading: summaryLoading } = useQuery({ queryKey: SUMMARY_KEY, queryFn: getSummary });
+  const { data: agents, isLoading: agentsLoading } = useQuery({
+    queryKey: AGENTS_KEY,
+    queryFn: listAgents,
+  });
+  const { data: ledger, isLoading: ledgerLoading } = useQuery({
+    queryKey: LEDGER_KEY,
+    queryFn: listLedger,
+  });
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: SUMMARY_KEY,
+    queryFn: getSummary,
+  });
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ["statement-agent", selected, stmtFrom, stmtTo],
     queryFn: () => getAgent(selected, stmtFrom, stmtTo),
     enabled: selected != null,
   });
-  const { data: clients, isLoading: clientsLoading } = useQuery({ queryKey: CLIENTS_KEY, queryFn: listClients });
+  const { data: clients, isLoading: clientsLoading } = useQuery({
+    queryKey: CLIENTS_KEY,
+    queryFn: listClients,
+  });
   const { data: clientDetail, isLoading: clientDetailLoading } = useQuery({
-    queryKey: ["statement-client", selectedClient, clientStmtFrom, clientStmtTo],
-    queryFn: () => getClientDetails(selectedClient!, clientStmtFrom, clientStmtTo),
+    queryKey: [
+      "statement-client",
+      selectedClient,
+      clientStmtFrom,
+      clientStmtTo,
+    ],
+    queryFn: () =>
+      getClientDetails(selectedClient!, clientStmtFrom, clientStmtTo),
     enabled: selectedClient != null,
   });
-  const { data: vouchers, isLoading: vouchersLoading } = useQuery({ queryKey: VOUCHERS_KEY, queryFn: listVouchers });
-  const { data: office } = useQuery({ queryKey: OFFICE_KEY, queryFn: getOffice });
-  const { data: agentNames } = useQuery({ queryKey: ["agent-names"], queryFn: listAgentNames });
-  const { data: openingEntries, isLoading: openingLoading } = useQuery({ queryKey: ["statement-opening"], queryFn: listOpening });
+  const { data: vouchers, isLoading: vouchersLoading } = useQuery({
+    queryKey: VOUCHERS_KEY,
+    queryFn: listVouchers,
+  });
+  const { data: office } = useQuery({
+    queryKey: OFFICE_KEY,
+    queryFn: getOffice,
+  });
+  const { data: agentNames } = useQuery({
+    queryKey: ["agent-names"],
+    queryFn: listAgentNames,
+  });
+  const { data: openingEntries, isLoading: openingLoading } = useQuery({
+    queryKey: ["statement-opening"],
+    queryFn: listOpening,
+  });
 
   const openingMut = useMutation({
     mutationFn: saveOpening,
@@ -373,18 +614,30 @@ export default function StatementPage() {
       setOpenAmount("");
       toast({ title: "تم حفظ القيد الافتتاحي" });
     },
-    onError: (e: any) => toast({ title: e?.message?.includes("404") || e?.message?.includes("موجود") ? "الوكيل غير موجود — أضفه أولاً من تبويب الوكلاء" : "تعذر حفظ القيد الافتتاحي", variant: "destructive" }),
+    onError: (e: any) =>
+      toast({
+        title:
+          e?.message?.includes("404") || e?.message?.includes("موجود")
+            ? "الوكيل غير موجود — أضفه أولاً من تبويب الوكلاء"
+            : "تعذر حفظ القيد الافتتاحي",
+        variant: "destructive",
+      }),
   });
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: AGENTS_KEY });
     qc.invalidateQueries({ queryKey: LEDGER_KEY });
     qc.invalidateQueries({ queryKey: SUMMARY_KEY });
-    if (selected != null) qc.invalidateQueries({ queryKey: ["statement-agent", selected] });
+    if (selected != null)
+      qc.invalidateQueries({ queryKey: ["statement-agent", selected] });
   };
 
   const onError = (e: any) =>
-    toast({ variant: "destructive", title: "خطأ", description: e?.message || "حدث خطأ" });
+    toast({
+      variant: "destructive",
+      title: "خطأ",
+      description: e?.message || "حدث خطأ",
+    });
 
   const saveAgent = useMutation({
     mutationFn: () =>
@@ -420,7 +673,10 @@ export default function StatementPage() {
         method: "PUT",
         credentials: "include",
         headers: jsonHeaders,
-        body: JSON.stringify({ oldName: clientEditTarget?.clientName, newName: clientNewName.trim() }),
+        body: JSON.stringify({
+          oldName: clientEditTarget?.clientName,
+          newName: clientNewName.trim(),
+        }),
       }).then(handle),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
@@ -435,7 +691,10 @@ export default function StatementPage() {
 
   const delClient = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/statement/clients/${id}`, { method: "DELETE", credentials: "include" }).then(handle),
+      fetch(`/api/statement/clients/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      }).then(handle),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
       setClientDeleteTarget(null);
@@ -474,7 +733,11 @@ export default function StatementPage() {
 
   const addLedger = useMutation({
     mutationFn: () =>
-      createLedger({ type: ledgerType, amount: Number(ledgerAmount), description: ledgerDesc.trim() }),
+      createLedger({
+        type: ledgerType,
+        amount: Number(ledgerAmount),
+        description: ledgerDesc.trim(),
+      }),
     onSuccess: () => {
       invalidateAll();
       setLedgerAmount("");
@@ -515,7 +778,12 @@ export default function StatementPage() {
       setVDesc("");
       setVDate(todayISO());
       setVLink("");
-      toast({ title: voucherKind === "receipt" ? "تم إنشاء سند القبض" : "تم إنشاء سند الصرف" });
+      toast({
+        title:
+          voucherKind === "receipt"
+            ? "تم إنشاء سند القبض"
+            : "تم إنشاء سند الصرف",
+      });
     },
     onError,
   });
@@ -553,14 +821,22 @@ export default function StatementPage() {
           <BarChart3 className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">كشف الحساب</h1>
-            <p className="text-sm text-muted-foreground">حسابات الوكلاء، حسابات العملاء، السندات، الدخل والنفقات، والملخص الشهري</p>
+            <p className="text-sm text-muted-foreground">
+              حسابات الوكلاء، حسابات العملاء، السندات، الدخل والنفقات، والملخص
+              الشهري
+            </p>
           </div>
         </div>
 
         {/* Print-only statement header — unified office header */}
         <div className="hidden print:block mb-4">
-          <PrintHeader office={office} details={[{ label: "التاريخ", value: La(todayISO()) }]} />
-          <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">كشف الحساب</p>
+          <PrintHeader
+            office={office}
+            details={[{ label: "التاريخ", value: La(todayISO()) }]}
+          />
+          <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">
+            كشف الحساب
+          </p>
         </div>
 
         <Tabs defaultValue="agents" dir="rtl">
@@ -586,11 +862,17 @@ export default function StatementPage() {
           <TabsContent value="agents" className="space-y-4">
             <div className="flex items-center justify-between no-print gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                يُضاف الوكيل تلقائياً عند تسجيل أي معاملة باسمه، ويظهر هنا كشف حسابه.
+                يُضاف الوكيل تلقائياً عند تسجيل أي معاملة باسمه، ويظهر هنا كشف
+                حسابه.
               </p>
               <div className="relative w-64">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pr-9 h-9" placeholder="بحث باسم الوكيل..." value={agentSearch} onChange={(e) => setAgentSearch(e.target.value)} />
+                <Input
+                  className="pr-9 h-9"
+                  placeholder="بحث باسم الوكيل..."
+                  value={agentSearch}
+                  onChange={(e) => setAgentSearch(e.target.value)}
+                />
               </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
@@ -613,38 +895,63 @@ export default function StatementPage() {
                       </TableCell>
                     </TableRow>
                   ) : agents?.length ? (
-                    agents.filter((a: any) => !agentSearch.trim() || (a.name ?? "").includes(agentSearch.trim())).map((ie: any) => (
-                      <TableRow key={ie.id} className="whitespace-nowrap hover:bg-muted/30">
-                        <TableCell className="font-medium">{ie.name}</TableCell>
-                        <TableCell>{ie.transactions}</TableCell>
-                        <TableCell>{nt(ie.totalPurchases)}</TableCell>
-                        <TableCell>{nt(ie.transferred)}</TableCell>
-                        <TableCell>
-                          <BalanceBadge balance={ie.balance} />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="outline" size="sm" onClick={() => setSelected(ie.id)}>
-                              <FileText className="w-4 h-4 ml-1" /> كشف الحساب
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(ie)} aria-label="تعديل">
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive"
-                              onClick={() => setDeleteTarget(ie)}
-                              aria-label="حذف"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    agents
+                      .filter(
+                        (a: any) =>
+                          !agentSearch.trim() ||
+                          (a.name ?? "").includes(agentSearch.trim()),
+                      )
+                      .map((ie: any) => (
+                        <TableRow
+                          key={ie.id}
+                          className="whitespace-nowrap hover:bg-muted/30"
+                        >
+                          <TableCell className="font-medium">
+                            {ie.name}
+                          </TableCell>
+                          <TableCell>{ie.transactions}</TableCell>
+                          <TableCell>{nt(ie.totalPurchases)}</TableCell>
+                          <TableCell>{nt(ie.transferred)}</TableCell>
+                          <TableCell>
+                            <BalanceBadge balance={ie.balance} />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelected(ie.id)}
+                              >
+                                <FileText className="w-4 h-4 ml-1" /> كشف الحساب
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEdit(ie)}
+                                aria-label="تعديل"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive"
+                                onClick={() => setDeleteTarget(ie)}
+                                aria-label="حذف"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
                   ) : (
-                    <EmptyRow colSpan={6} icon={Users} title="لا يوجد وكلاء بعد" hint="يُضاف الوكيل تلقائياً عند تسجيل معاملة باسمه" />
+                    <EmptyRow
+                      colSpan={6}
+                      icon={Users}
+                      title="لا يوجد وكلاء بعد"
+                      hint="يُضاف الوكيل تلقائياً عند تسجيل معاملة باسمه"
+                    />
                   )}
                 </TableBody>
               </Table>
@@ -659,18 +966,23 @@ export default function StatementPage() {
               </p>
               <div className="relative w-64">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pr-9 h-9" placeholder="بحث باسم العميل..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+                <Input
+                  className="pr-9 h-9"
+                  placeholder="بحث باسم العميل..."
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                />
               </div>
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
-                    <TableHead className="text-right">العميل</TableHead>
+                    <TableHead className="text-right">العمي �</TableHead>
                     <TableHead className="text-right">المعاملات</TableHead>
                     <TableHead className="text-right">إجمالي البيع</TableHead>
                     <TableHead className="text-right">المقبوض</TableHead>
-                    <TableHead className="text-right">الرصيد</TableHead>
+                    <TableHead className="text-right">الباقي</TableHead>
                     <TableHead className="text-right">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -682,47 +994,76 @@ export default function StatementPage() {
                       </TableCell>
                     </TableRow>
                   ) : clients?.length ? (
-                    clients.filter((c: any) => !clientSearch.trim() || (c.clientName ?? "").includes(clientSearch.trim())).map((c: any) => (
-                      <TableRow
-                        key={c.clientName}
-                        className="whitespace-nowrap hover:bg-muted/30 cursor-pointer"
-                        onClick={() => setSelectedClient(c.clientName)}
-                      >
-                        <TableCell className="font-medium">{c.clientName}</TableCell>
-                        <TableCell>{c.txCount}</TableCell>
-                        <TableCell>{nt(c.totalSales)}</TableCell>
-                        <TableCell className="text-emerald-600 font-medium">{nt(c.totalReceived)}</TableCell>
-                        <TableCell>
-                          <ClientBalanceBadge balance={c.balance} />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(c.clientName); }}>
-                              <FileText className="w-4 h-4 ml-1" /> كشف الحساب
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="تعديل"
-                              onClick={(e) => { e.stopPropagation(); setClientEditTarget(c); setClientNewName(c.clientName); }}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive"
-                              aria-label="حذف"
-                              onClick={(e) => { e.stopPropagation(); setClientDeleteTarget(c); }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    clients
+                      .filter(
+                        (c: any) =>
+                          !clientSearch.trim() ||
+                          (c.clientName ?? "").includes(clientSearch.trim()),
+                      )
+                      .map((c: any) => (
+                        <TableRow
+                          key={c.clientName}
+                          className="whitespace-nowrap hover:bg-muted/30 cursor-pointer"
+                          onClick={() => setSelectedClient(c.clientName)}
+                        >
+                          <TableCell className="font-medium">
+                            {c.clientName}
+                          </TableCell>
+                          <TableCell>{c.txCount}</TableCell>
+                          <TableCell>{nt(c.totalSales)}</TableCell>
+                          <TableCell className="text-emerald-600 font-medium">
+                            {nt(c.totalReceived)}
+                          </TableCell>
+                          <TableCell>
+                            <ClientBalanceBadge balance={c.balance} />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedClient(c.clientName);
+                                }}
+                              >
+                                <FileText className="w-4 h-4 ml-1" /> كشف الحساب
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="تعديل"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setClientEditTarget(c);
+                                  setClientNewName(c.clientName);
+                                }}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive"
+                                aria-label="حذف"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setClientDeleteTarget(c);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
                   ) : (
-                    <EmptyRow colSpan={6} icon={Wallet} title="لا يوجد عملاء بعد" hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات" />
+                    <EmptyRow
+                      colSpan={6}
+                      icon={Wallet}
+                      title="لا يوجد عملاء بعد"
+                      hint="تظهر حسابات العملاء تلقائياً عند إضافة التأشيرات"
+                    />
                   )}
                 </TableBody>
               </Table>
@@ -736,13 +1077,26 @@ export default function StatementPage() {
                 أنشئ سندات القبض والصرف النقدية مرتبطة بحساب وكيل أو عميل.
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setOpenName(""); setOpenAmount(""); setOpeningDialog(true); }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setOpenName("");
+                    setOpenAmount("");
+                    setOpeningDialog(true);
+                  }}
+                >
                   <Wallet className="w-4 h-4 ml-1.5" /> قيد افتتاحي
                 </Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openVoucher("receipt")}>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => openVoucher("receipt")}
+                >
                   <ArrowUpCircle className="w-4 h-4 ml-1.5" /> سند قبض
                 </Button>
-                <Button variant="destructive" onClick={() => openVoucher("payment")}>
+                <Button
+                  variant="destructive"
+                  onClick={() => openVoucher("payment")}
+                >
                   <ArrowDownCircle className="w-4 h-4 ml-1.5" /> سند صرف
                 </Button>
               </div>
@@ -756,7 +1110,9 @@ export default function StatementPage() {
                     <TableHead className="text-right">الطرف</TableHead>
                     <TableHead className="text-right">المبلغ</TableHead>
                     <TableHead className="text-right">البيان</TableHead>
-                    <TableHead className="text-right no-print">إجراءات</TableHead>
+                    <TableHead className="text-right no-print">
+                      إجراءات
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -768,7 +1124,10 @@ export default function StatementPage() {
                     </TableRow>
                   ) : vouchers?.length ? (
                     vouchers.map((v: any) => (
-                      <TableRow key={v.id} className="whitespace-nowrap hover:bg-muted/30">
+                      <TableRow
+                        key={v.id}
+                        className="whitespace-nowrap hover:bg-muted/30"
+                      >
                         <TableCell>{La(v.voucherDate)}</TableCell>
                         <TableCell>
                           {v.kind === "receipt" ? (
@@ -777,16 +1136,25 @@ export default function StatementPage() {
                             </Badge>
                           ) : (
                             <Badge variant="destructive" className="text-xs">
-                              <ArrowDownCircle className="w-3 h-3 ml-1" /> سند صرف
+                              <ArrowDownCircle className="w-3 h-3 ml-1" /> سند
+                              صرف
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="font-medium">{v.partyName}</TableCell>
-                        <TableCell className="font-medium">{nt(Number(v.amount))}</TableCell>
+                        <TableCell className="font-medium">
+                          {v.partyName}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {nt(Number(v.amount))}
+                        </TableCell>
                         <TableCell>{v.description || "-"}</TableCell>
                         <TableCell className="no-print">
                           <div className="flex gap-1">
-                            <Button variant="outline" size="sm" onClick={() => setPrintVoucher(v)}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPrintVoucher(v)}
+                            >
                               <Printer className="w-4 h-4 ml-1" /> طباعة
                             </Button>
                             <Button
@@ -803,7 +1171,12 @@ export default function StatementPage() {
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={6} icon={Receipt} title="لا توجد سندات بعد" hint="أنشئ سند قبض أو سند صرف لتظهر هنا" />
+                    <EmptyRow
+                      colSpan={6}
+                      icon={Receipt}
+                      title="لا توجد سندات بعد"
+                      hint="أنشئ سند قبض أو سند صرف لتظهر هنا"
+                    />
                   )}
                 </TableBody>
               </Table>
@@ -820,7 +1193,10 @@ export default function StatementPage() {
             <div className="rounded-lg border border-border bg-card p-4 flex flex-wrap items-end gap-3 no-print">
               <div>
                 <p className="text-sm mb-1.5 font-medium">النوع</p>
-                <Select value={ledgerType} onValueChange={(v) => setLedgerType(v)}>
+                <Select
+                  value={ledgerType}
+                  onValueChange={(v) => setLedgerType(v)}
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
@@ -850,7 +1226,11 @@ export default function StatementPage() {
                 />
               </div>
               <Button
-                disabled={!Number(ledgerAmount) || !ledgerDesc.trim() || addLedger.isPending}
+                disabled={
+                  !Number(ledgerAmount) ||
+                  !ledgerDesc.trim() ||
+                  addLedger.isPending
+                }
                 onClick={() => addLedger.mutate()}
               >
                 <Plus className="w-4 h-4 ml-1.5" /> تسجيل
@@ -876,7 +1256,10 @@ export default function StatementPage() {
                     </TableRow>
                   ) : ledger?.length ? (
                     ledger.map((ie: any) => (
-                      <TableRow key={ie.id} className="whitespace-nowrap hover:bg-muted/30">
+                      <TableRow
+                        key={ie.id}
+                        className="whitespace-nowrap hover:bg-muted/30"
+                      >
                         <TableCell>{La(ie.entryDate)}</TableCell>
                         <TableCell>
                           {ie.type === "income" ? (
@@ -890,7 +1273,9 @@ export default function StatementPage() {
                           )}
                         </TableCell>
                         <TableCell>{ie.description}</TableCell>
-                        <TableCell className="font-medium">{nt(Number(ie.amount))}</TableCell>
+                        <TableCell className="font-medium">
+                          {nt(Number(ie.amount))}
+                        </TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
@@ -905,7 +1290,12 @@ export default function StatementPage() {
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={5} icon={TrendingUp} title="لا توجد قيود بعد" hint="سجّل النفقات والدخل العام للمكتب هنا" />
+                    <EmptyRow
+                      colSpan={5}
+                      icon={TrendingUp}
+                      title="لا توجد قيود بعد"
+                      hint="سجّل النفقات والدخل العام للمكتب هنا"
+                    />
                   )}
                 </TableBody>
               </Table>
@@ -925,7 +1315,9 @@ export default function StatementPage() {
                   <TableRow className="whitespace-nowrap">
                     <TableHead className="text-right">الشهر</TableHead>
                     <TableHead className="text-right">عدد المعاملات</TableHead>
-                    <TableHead className="text-right">مبيعات المعاملات</TableHead>
+                    <TableHead className="text-right">
+                      مبيعات المعاملات
+                    </TableHead>
                     <TableHead className="text-right">ربح المعاملات</TableHead>
                     <TableHead className="text-right">دخل آخر</TableHead>
                     <TableHead className="text-right">النفقات</TableHead>
@@ -941,36 +1333,57 @@ export default function StatementPage() {
                     </TableRow>
                   ) : summary?.length ? (
                     summary.map((ie: any) => (
-                      <TableRow key={ie.month} className="whitespace-nowrap hover:bg-muted/30">
-                        <TableCell className="font-medium">{ie.month}</TableCell>
+                      <TableRow
+                        key={ie.month}
+                        className="whitespace-nowrap hover:bg-muted/30"
+                      >
+                        <TableCell className="font-medium">
+                          {ie.month}
+                        </TableCell>
                         <TableCell>{ie.txCount}</TableCell>
                         <TableCell>{nt(ie.txSales)}</TableCell>
-                        <TableCell className="text-emerald-600">{nt(ie.txProfit)}</TableCell>
+                        <TableCell className="text-emerald-600">
+                          {nt(ie.txProfit)}
+                        </TableCell>
                         <TableCell>{nt(ie.otherIncome)}</TableCell>
-                        <TableCell className="text-destructive">{nt(ie.expenses)}</TableCell>
-                        <TableCell className={`font-bold ${ie.net >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                        <TableCell className="text-destructive">
+                          {nt(ie.expenses)}
+                        </TableCell>
+                        <TableCell
+                          className={`font-bold ${ie.net >= 0 ? "text-emerald-600" : "text-destructive"}`}
+                        >
                           {nt(ie.net)}
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
-                    <EmptyRow colSpan={7} icon={BarChart3} title="لا توجد بيانات بعد" hint="الملخص يُبنى تلقائياً من معاملاتك وقيودك" />
+                    <EmptyRow
+                      colSpan={7}
+                      icon={BarChart3}
+                      title="لا توجد بيانات بعد"
+                      hint="الملخص يُبنى تلقائياً من معاملاتك وقيودك"
+                    />
                   )}
                 </TableBody>
               </Table>
             </div>
           </TabsContent>
-
         </Tabs>
 
         {/* Opening entry dialog — قيد افتتاحي */}
         <Dialog open={openingDialog} onOpenChange={setOpeningDialog}>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogContent
+            className="max-w-lg max-h-[85vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Wallet className="w-5 h-5 text-primary" /> قيد افتتاحي</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" /> قيد افتتاحي
+              </DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              سجّل رصيداً افتتاحياً لعميل أو وكيل، ويظهر تلقائياً في كشف حسابه. القيمة الموجبة تعني أن عليه مبلغاً لك.
+              سجّل رصيداً افتتاحياً لعميل أو وكيل، ويظهر تلقائياً في كشف حسابه.
+              القيمة الموجبة تعني أن عليه مبلغاً لك.
             </p>
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -979,76 +1392,128 @@ export default function StatementPage() {
                   <select
                     className="w-full h-10 border rounded-md px-3 text-sm bg-background"
                     value={openType}
-                    onChange={(e) => { setOpenType(e.target.value as any); setOpenName(""); }}
+                    onChange={(e) => {
+                      setOpenType(e.target.value as any);
+                      setOpenName("");
+                    }}
                   >
                     <option value="client">عميل</option>
                     <option value="agent">وكيل</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">{openType === "agent" ? "اسم الوكيل" : "اسم العميل"}</label>
+                  <label className="text-sm font-medium">
+                    {openType === "agent" ? "اسم الوكيل" : "اسم العميل"}
+                  </label>
                   <Input
                     value={openName}
                     onChange={(e) => setOpenName(e.target.value)}
-                    placeholder={openType === "agent" ? "اختر أو اكتب اسم الوكيل" : "اختر أو اكتب اسم العميل"}
+                    placeholder={
+                      openType === "agent"
+                        ? "اختر أو اكتب اسم الوكيل"
+                        : "اختر أو اكتب اسم العميل"
+                    }
                     list="opening-names"
                   />
                   <datalist id="opening-names">
                     {(openType === "agent"
-                      ? (agentNames ?? []).map((a: any) => (typeof a === "string" ? a : a.name))
+                      ? (agentNames ?? []).map((a: any) =>
+                          typeof a === "string" ? a : a.name,
+                        )
                       : (clients ?? []).map((c: any) => c.clientName)
-                    ).map((n: string) => <option key={n} value={n} />)}
+                    ).map((n: string) => (
+                      <option key={n} value={n} />
+                    ))}
                   </datalist>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">المبلغ</label>
-                  <Input type="number" value={openAmount} onChange={(e) => setOpenAmount(e.target.value)} placeholder="0" dir="ltr" />
+                  <Input
+                    type="number"
+                    value={openAmount}
+                    onChange={(e) => setOpenAmount(e.target.value)}
+                    placeholder="0"
+                    dir="ltr"
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 <Button
-                  disabled={openingMut.isPending || !openName.trim() || openAmount === "" || isNaN(Number(openAmount))}
-                  onClick={() => openingMut.mutate({ partyType: openType, name: openName.trim(), amount: Number(openAmount) })}
+                  disabled={
+                    openingMut.isPending ||
+                    !openName.trim() ||
+                    openAmount === "" ||
+                    isNaN(Number(openAmount))
+                  }
+                  onClick={() =>
+                    openingMut.mutate({
+                      partyType: openType,
+                      name: openName.trim(),
+                      amount: Number(openAmount),
+                    })
+                  }
                 >
-                  {openingMut.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-1.5" /> : <Plus className="w-4 h-4 ml-1.5" />}
+                  {openingMut.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin ml-1.5" />
+                  ) : (
+                    <Plus className="w-4 h-4 ml-1.5" />
+                  )}
                   حفظ القيد الافتتاحي
                 </Button>
-                <p className="text-xs text-muted-foreground">لحذف قيد افتتاحي، احفظه بمبلغ 0.</p>
+                <p className="text-xs text-muted-foreground">
+                  لحذف قيد افتتاحي، احفظه بمبلغ 0.
+                </p>
               </div>
 
               <div className="rounded-lg border border-border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="whitespace-nowrap">
-                    <TableHead className="text-right">النوع</TableHead>
-                    <TableHead className="text-right">الاسم</TableHead>
-                    <TableHead className="text-right">الرصيد الافتتاحي</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {openingLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
-                      </TableCell>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="whitespace-nowrap">
+                      <TableHead className="text-right">النوع</TableHead>
+                      <TableHead className="text-right">الاسم</TableHead>
+                      <TableHead className="text-right">
+                        الرصيد الافتتاحي
+                      </TableHead>
                     </TableRow>
-                  ) : openingEntries?.length ? (
-                    openingEntries.map((e: any) => (
-                      <TableRow key={`${e.partyType}-${e.name}`} className="whitespace-nowrap">
-                        <TableCell>{e.partyType === "agent" ? "وكيل" : "عميل"}</TableCell>
-                        <TableCell className="font-medium">{e.name}</TableCell>
-                        <TableCell dir="ltr">{nt(e.amount)}</TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {openingLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-10">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                        </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRow colSpan={3} icon={Wallet} title="لا توجد قيود افتتاحية" hint="أضف قيداً افتتاحياً من النموذج أعلاه" />
-                  )}
-                </TableBody>
-              </Table>
+                    ) : openingEntries?.length ? (
+                      openingEntries.map((e: any) => (
+                        <TableRow
+                          key={`${e.partyType}-${e.name}`}
+                          className="whitespace-nowrap"
+                        >
+                          <TableCell>
+                            {e.partyType === "agent" ? "وكيل" : "عميل"}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {e.name}
+                          </TableCell>
+                          <TableCell dir="ltr">{nt(e.amount)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <EmptyRow
+                        colSpan={3}
+                        icon={Wallet}
+                        title="لا توجد قيود افتتاحية"
+                        hint="أضف قيداً افتتاحياً من النموذج أعلاه"
+                      />
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpeningDialog(false)}>إغلاق</Button>
+              <Button variant="outline" onClick={() => setOpeningDialog(false)}>
+                إغلاق
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1062,20 +1527,32 @@ export default function StatementPage() {
         >
           <DialogContent className="max-w-sm" dir="rtl">
             <DialogHeader>
-              <DialogTitle>{editing ? `تعديل الوكيل — ${editing.name}` : "وكيل جديد"}</DialogTitle>
+              <DialogTitle>
+                {editing ? `تعديل الوكيل — ${editing.name}` : "وكيل جديد"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
                 <p className="text-sm mb-1.5 font-medium">اسم الوكيل</p>
-                <Input value={nameField} onChange={(e) => setNameField(e.target.value)} placeholder="مثال: وكيل صنعاء" />
+                <Input
+                  value={nameField}
+                  onChange={(e) => setNameField(e.target.value)}
+                  placeholder="مثال: وكيل صنعاء"
+                />
               </div>
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setAgentDialog(false)}>
                 إلغاء
               </Button>
-              <Button disabled={nameField.trim().length < 2 || saveAgent.isPending} onClick={() => saveAgent.mutate()}>
-                {saveAgent.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
+              <Button
+                disabled={nameField.trim().length < 2 || saveAgent.isPending}
+                onClick={() => saveAgent.mutate()}
+              >
+                {saveAgent.isPending && (
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                )}{" "}
+                حفظ
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1093,7 +1570,8 @@ export default function StatementPage() {
               <DialogTitle>حذف الوكيل — {deleteTarget?.name}</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              سيُحذف الوكيل ودفعاته من كشف الحساب. معاملاته السابقة تبقى محفوظة باسمه.
+              سيُحذف الوكيل ودفعاته من كشف الحساب. معاملاته السابقة تبقى محفوظة
+              باسمه.
             </p>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setDeleteTarget(null)}>
@@ -1119,22 +1597,38 @@ export default function StatementPage() {
         >
           <DialogContent className="max-w-sm" dir="rtl">
             <DialogHeader>
-              <DialogTitle>تعديل العميل — {clientEditTarget?.clientName}</DialogTitle>
+              <DialogTitle>
+                تعديل العميل — {clientEditTarget?.clientName}
+              </DialogTitle>
             </DialogHeader>
             <div>
               <p className="text-sm mb-1.5 font-medium">اسم العميل</p>
-              <Input value={clientNewName} onChange={(e) => setClientNewName(e.target.value)} placeholder="اسم العميل" />
-              <p className="text-xs text-muted-foreground mt-1">سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.</p>
+              <Input
+                value={clientNewName}
+                onChange={(e) => setClientNewName(e.target.value)}
+                placeholder="اسم العميل"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.
+              </p>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setClientEditTarget(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setClientEditTarget(null)}
+              >
                 إلغاء
               </Button>
               <Button
-                disabled={clientNewName.trim().length < 2 || renameClient.isPending}
+                disabled={
+                  clientNewName.trim().length < 2 || renameClient.isPending
+                }
                 onClick={() => renameClient.mutate()}
               >
-                {renameClient.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
+                {renameClient.isPending && (
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                )}{" "}
+                حفظ
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1149,7 +1643,9 @@ export default function StatementPage() {
         >
           <DialogContent className="max-w-sm" dir="rtl">
             <DialogHeader>
-              <DialogTitle>حذف حساب العميل — {clientDeleteTarget?.clientName}</DialogTitle>
+              <DialogTitle>
+                حذف حساب العميل — {clientDeleteTarget?.clientName}
+              </DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
               {clientDeleteTarget?.txCount
@@ -1157,7 +1653,10 @@ export default function StatementPage() {
                 : "سيُحذف حساب العميل من كشف الحساب."}
             </p>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setClientDeleteTarget(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setClientDeleteTarget(null)}
+              >
                 إلغاء
               </Button>
               <Button
@@ -1168,7 +1667,12 @@ export default function StatementPage() {
                     delClient.mutate(clientDeleteTarget.manualId);
                   } else {
                     setClientDeleteTarget(null);
-                    toast({ variant: "destructive", title: "لا يمكن الحذف", description: "هذا الحساب مُشتق من المعاملات المسجلة — احذف معاملاته أولاً." });
+                    toast({
+                      variant: "destructive",
+                      title: "لا يمكن الحذف",
+                      description:
+                        "هذا الحساب مُشتق من المعاملات المسجلة — احذف معاملاته أولاً.",
+                    });
                   }
                 }}
               >
@@ -1191,10 +1695,14 @@ export default function StatementPage() {
             }
           }}
         >
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogContent
+            className="max-w-3xl max-h-[85vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" /> كشف حساب — {detail?.agent?.name ?? ""}
+                <FileText className="w-5 h-5 text-primary" /> كشف حساب —{" "}
+                {detail?.agent?.name ?? ""}
               </DialogTitle>
             </DialogHeader>
             {detailLoading || !detail ? (
@@ -1209,12 +1717,18 @@ export default function StatementPage() {
                     <p className="font-bold text-lg">{detail.totals.count}</p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">إجمالي الشراء</p>
-                    <p className="font-bold text-lg">{nt(detail.totals.totalPurchases)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      إجمالي الشراء
+                    </p>
+                    <p className="font-bold text-lg">
+                      {nt(detail.totals.totalPurchases)}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">محول للوكيل</p>
-                    <p className="font-bold text-lg">{nt(detail.totals.transferred)}</p>
+                    <p className="font-bold text-lg">
+                      {nt(detail.totals.transferred)}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">الباقي</p>
@@ -1225,12 +1739,17 @@ export default function StatementPage() {
                 <div className="rounded-lg border border-border bg-muted/30 p-3 flex flex-wrap items-end gap-2">
                   <div>
                     <p className="text-xs mb-1 font-medium">الاتجاه</p>
-                    <Select value={payDirection} onValueChange={(v) => setPayDirection(v)}>
+                    <Select
+                      value={payDirection}
+                      onValueChange={(v) => setPayDirection(v)}
+                    >
                       <SelectTrigger className="w-36 h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="from_agent">قبضنا من الوكيل</SelectItem>
+                        <SelectItem value="from_agent">
+                          قبضنا من الوكيل
+                        </SelectItem>
                         <SelectItem value="to_agent">دفعنا للوكيل</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1248,9 +1767,17 @@ export default function StatementPage() {
                   </div>
                   <div className="flex-1 min-w-32">
                     <p className="text-xs mb-1 font-medium">ملاحظة (اختياري)</p>
-                    <Input className="h-9" value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
+                    <Input
+                      className="h-9"
+                      value={payNotes}
+                      onChange={(e) => setPayNotes(e.target.value)}
+                    />
                   </div>
-                  <Button size="sm" disabled={!Number(payAmount) || addPayment.isPending} onClick={() => addPayment.mutate()}>
+                  <Button
+                    size="sm"
+                    disabled={!Number(payAmount) || addPayment.isPending}
+                    onClick={() => addPayment.mutate()}
+                  >
                     <Plus className="w-4 h-4 ml-1" /> تسجيل دفعة
                   </Button>
                 </div>
@@ -1262,8 +1789,12 @@ export default function StatementPage() {
                       <Table>
                         <TableHeader>
                           <TableRow className="whitespace-nowrap">
-                            <TableHead className="text-right">التاريخ</TableHead>
-                            <TableHead className="text-right">الاتجاه</TableHead>
+                            <TableHead className="text-right">
+                              التاريخ
+                            </TableHead>
+                            <TableHead className="text-right">
+                              الاتجاه
+                            </TableHead>
                             <TableHead className="text-right">المبلغ</TableHead>
                             <TableHead className="text-right">ملاحظة</TableHead>
                             <TableHead className="text-right"></TableHead>
@@ -1273,8 +1804,14 @@ export default function StatementPage() {
                           {detail.payments.map((ie: any) => (
                             <TableRow key={ie.id} className="whitespace-nowrap">
                               <TableCell>{La(ie.paidAt)}</TableCell>
-                              <TableCell>{ie.direction === "from_agent" ? "قبضنا منه" : "دفعنا له"}</TableCell>
-                              <TableCell className="font-medium">{nt(Number(ie.amount))}</TableCell>
+                              <TableCell>
+                                {ie.direction === "from_agent"
+                                  ? "قبضنا منه"
+                                  : "دفعنا له"}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {nt(Number(ie.amount))}
+                              </TableCell>
                               <TableCell>{ie.notes || "-"}</TableCell>
                               <TableCell>
                                 <Button
@@ -1296,22 +1833,31 @@ export default function StatementPage() {
                 )}
 
                 <div>
-                  <p className="font-semibold mb-2">المعاملات ({detail.totals.count})</p>
+                  <p className="font-semibold mb-2">
+                    المعاملات ({detail.totals.count})
+                  </p>
                   <div className="rounded-lg border border-border overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="whitespace-nowrap">
                           <TableHead className="text-right">التاريخ</TableHead>
                           <TableHead className="text-right">النوع</TableHead>
-                          <TableHead className="text-right">اسم الجواز</TableHead>
+                          <TableHead className="text-right">
+                            اسم الجواز
+                          </TableHead>
                           <TableHead className="text-right">الشراء</TableHead>
-                          <TableHead className="text-right">محول للوكيل</TableHead>
+                          <TableHead className="text-right">
+                            محول للوكيل
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {detail.transactions.length ? (
                           detail.transactions.map((ie: any) => (
-                            <TableRow key={`${ie.kind}-${ie.id}`} className="whitespace-nowrap">
+                            <TableRow
+                              key={`${ie.kind}-${ie.id}`}
+                              className="whitespace-nowrap"
+                            >
                               <TableCell>{La(ie.date)}</TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="text-xs">
@@ -1340,37 +1886,65 @@ export default function StatementPage() {
                 <div className="rounded-xl border-2 border-[hsl(43,65%,52%)]/60 overflow-hidden">
                   <div className="bg-[hsl(220,40%,18%)] text-white px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
                     <p className="font-bold flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
+                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" />{" "}
+                      كشف الحساب التفصيلي
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
                         className="bg-white/10 border-[hsl(43,65%,52%)] text-white hover:bg-white/20 hover:text-white font-bold"
-                        onClick={() => detail?.ledger && exportLedgerXlsx(detail.ledger, detail.agent?.name ?? "", stmtFrom, stmtTo)}
+                        onClick={() =>
+                          detail?.ledger &&
+                          exportLedgerXlsx(
+                            detail.ledger,
+                            detail.agent?.name ?? "",
+                            stmtFrom,
+                            stmtTo,
+                          )
+                        }
                       >
-                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
+                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير
+                        Excel
                       </Button>
                       <Button
                         size="sm"
                         className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
                         onClick={() => setPrintStatement(true)}
                       >
-                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة
+                        الكشف
                       </Button>
                     </div>
                   </div>
                   <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
                     <div>
                       <p className="text-xs mb-1 font-medium">من تاريخ</p>
-                      <Input type="date" className="h-9 w-40" value={stmtFrom} onChange={(e) => setStmtFrom(e.target.value)} />
+                      <Input
+                        type="date"
+                        className="h-9 w-40"
+                        value={stmtFrom}
+                        onChange={(e) => setStmtFrom(e.target.value)}
+                      />
                     </div>
                     <div>
                       <p className="text-xs mb-1 font-medium">إلى تاريخ</p>
-                      <Input type="date" className="h-9 w-40" value={stmtTo} onChange={(e) => setStmtTo(e.target.value)} />
+                      <Input
+                        type="date"
+                        className="h-9 w-40"
+                        value={stmtTo}
+                        onChange={(e) => setStmtTo(e.target.value)}
+                      />
                     </div>
                     {(stmtFrom || stmtTo) && (
-                      <Button variant="ghost" size="sm" onClick={() => { setStmtFrom(""); setStmtTo(""); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setStmtFrom("");
+                          setStmtTo("");
+                        }}
+                      >
                         عرض كل الفترات
                       </Button>
                     )}
@@ -1385,10 +1959,20 @@ export default function StatementPage() {
         </Dialog>
 
         {/* Print agent statement dialog */}
-        <Dialog open={printStatement} onOpenChange={(o) => { if (!o) setPrintStatement(false); }}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <Dialog
+          open={printStatement}
+          onOpenChange={(o) => {
+            if (!o) setPrintStatement(false);
+          }}
+        >
+          <DialogContent
+            className="max-w-4xl max-h-[90vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader className="no-print">
-              <DialogTitle>كشف حساب تفصيلي — {detail?.agent?.name ?? ""}</DialogTitle>
+              <DialogTitle>
+                كشف حساب تفصيلي — {detail?.agent?.name ?? ""}
+              </DialogTitle>
             </DialogHeader>
             {detail?.ledger && (
               <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
@@ -1411,36 +1995,51 @@ export default function StatementPage() {
                     <tr>
                       <td>
                         <div className="space-y-4">
-                  {/* Statement title band */}
-                  <div className="flex items-stretch gap-2">
-                    <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
-                      كشف حساب تفصيلي للوكيل: <span className="text-[hsl(43,70%,65%)]">{detail.agent.name}</span>
-                    </div>
-                    <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
-                      {stmtFrom || stmtTo
-                        ? `خلال الفترة من ${stmtFrom ? La(stmtFrom) : "البداية"} إلى ${stmtTo ? La(stmtTo) : "اليوم"}`
-                        : "عن كامل الفترة حتى تاريخه"}
-                    </div>
-                  </div>
-                  <LedgerTable ledger={detail.ledger} />
-                  {/* Signature & stamp */}
-                  <div className="flex justify-between items-end pt-4 text-sm">
-                    <div className="text-center">
-                      <div className="h-16 mb-1" />
-                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع الوكيل</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-end justify-center gap-2 h-16 mb-1">
-                        {office?.signatureImage && (
-                          <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
-                        )}
-                        {office?.stampImage && (
-                          <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
-                        )}
-                      </div>
-                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
-                    </div>
-                  </div>
+                          {/* Statement title band */}
+                          <div className="flex items-stretch gap-2">
+                            <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
+                              كشف حساب تفصيلي للوكيل:{" "}
+                              <span className="text-[hsl(43,70%,65%)]">
+                                {detail.agent.name}
+                              </span>
+                            </div>
+                            <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
+                              {stmtFrom || stmtTo
+                                ? `خلال الفترة من ${stmtFrom ? La(stmtFrom) : "البداية"} إلى ${stmtTo ? La(stmtTo) : "اليوم"}`
+                                : "عن كامل الفترة حتى تاريخه"}
+                            </div>
+                          </div>
+                          <LedgerTable ledger={detail.ledger} />
+                          {/* Signature & stamp */}
+                          <div className="flex justify-between items-end pt-4 text-sm">
+                            <div className="text-center">
+                              <div className="h-16 mb-1" />
+                              <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                                توقيع الوكيل
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                                {office?.signatureImage && (
+                                  <img
+                                    src={office.signatureImage}
+                                    alt="توقيع المكتب"
+                                    className="max-h-[60px] w-auto object-contain"
+                                  />
+                                )}
+                                {office?.stampImage && (
+                                  <img
+                                    src={office.stampImage}
+                                    alt="ختم المكتب"
+                                    className="max-h-[64px] w-auto object-contain"
+                                  />
+                                )}
+                              </div>
+                              <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                                توقيع المكتب
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -1449,12 +2048,23 @@ export default function StatementPage() {
               </div>
             )}
             <DialogFooter className="gap-2 no-print">
-              <Button variant="outline" onClick={() => setPrintStatement(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setPrintStatement(false)}
+              >
                 إغلاق
               </Button>
               <Button
                 variant="outline"
-                onClick={() => detail?.ledger && exportLedgerXlsx(detail.ledger, detail.agent?.name ?? "", stmtFrom, stmtTo)}
+                onClick={() =>
+                  detail?.ledger &&
+                  exportLedgerXlsx(
+                    detail.ledger,
+                    detail.agent?.name ?? "",
+                    stmtFrom,
+                    stmtTo,
+                  )
+                }
               >
                 <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
@@ -1476,10 +2086,14 @@ export default function StatementPage() {
             }
           }}
         >
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogContent
+            className="max-w-3xl max-h-[85vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-primary" /> كشف حساب — {selectedClient ?? ""}
+                <Wallet className="w-5 h-5 text-primary" /> كشف حساب —{" "}
+                {selectedClient ?? ""}
               </DialogTitle>
             </DialogHeader>
             {clientDetailLoading || !clientDetail ? (
@@ -1491,31 +2105,55 @@ export default function StatementPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">المعاملات</p>
-                    <p className="font-bold text-lg">{clientDetail.account.txCount}</p>
+                    <p className="font-bold text-lg">
+                      {clientDetail.account.txCount}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">إجمالي البيع</p>
-                    <p className="font-bold text-lg">{nt(clientDetail.account.totalSales)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      إجمالي البيع
+                    </p>
+                    <p className="font-bold text-lg">
+                      {nt(clientDetail.account.totalSales)}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">المقبوض</p>
-                    <p className="font-bold text-lg text-emerald-600">{nt(clientDetail.account.totalReceived)}</p>
-                    {(Number(clientDetail.account.voucherReceipts) > 0 || Number(clientDetail.account.voucherPayments) > 0) && (
+                    <p className="font-bold text-lg text-emerald-600">
+                      {nt(clientDetail.account.totalReceived)}
+                    </p>
+                    {(Number(clientDetail.account.voucherReceipts) > 0 ||
+                      Number(clientDetail.account.voucherPayments) > 0) && (
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {Number(clientDetail.account.voucherReceipts) > 0 && <>+ سندات قبض {nt(clientDetail.account.voucherReceipts)}</>}
-                        {Number(clientDetail.account.voucherReceipts) > 0 && Number(clientDetail.account.voucherPayments) > 0 && " — "}
-                        {Number(clientDetail.account.voucherPayments) > 0 && <>سندات صرف {nt(clientDetail.account.voucherPayments)}</>}
+                        {Number(clientDetail.account.voucherReceipts) > 0 && (
+                          <>
+                            + سندات قبض{" "}
+                            {nt(clientDetail.account.voucherReceipts)}
+                          </>
+                        )}
+                        {Number(clientDetail.account.voucherReceipts) > 0 &&
+                          Number(clientDetail.account.voucherPayments) > 0 &&
+                          " — "}
+                        {Number(clientDetail.account.voucherPayments) > 0 && (
+                          <>
+                            سندات صرف {nt(clientDetail.account.voucherPayments)}
+                          </>
+                        )}
                       </p>
                     )}
                   </div>
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">الرصيد</p>
-                    <ClientBalanceBadge balance={clientDetail.account.balance} />
+                    <ClientBalanceBadge
+                      balance={clientDetail.account.balance}
+                    />
                   </div>
                 </div>
 
                 <div>
-                  <p className="font-semibold mb-2">المعاملات ({clientDetail.account.txCount})</p>
+                  <p className="font-semibold mb-2">
+                    المعاملات ({clientDetail.account.txCount})
+                  </p>
                   <div className="rounded-lg border border-border overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -1533,15 +2171,25 @@ export default function StatementPage() {
                             <TableRow key={t.id} className="whitespace-nowrap">
                               <TableCell>{La(t.issueDate)}</TableCell>
                               <TableCell>
-                                <Badge variant="outline" className="text-xs">{t.type}</Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {t.type}
+                                </Badge>
                               </TableCell>
                               <TableCell>{nt(t.salePrice)}</TableCell>
-                              <TableCell className="text-emerald-600">{nt(t.receivedFromClient)}</TableCell>
-                              <TableCell className="font-medium">{nt(t.salePrice - t.receivedFromClient)}</TableCell>
+                              <TableCell className="text-emerald-600">
+                                {nt(t.receivedFromClient)}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {nt(t.salePrice - t.receivedFromClient)}
+                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
-                          <EmptyRow colSpan={5} icon={Wallet} title="لا توجد معاملات" />
+                          <EmptyRow
+                            colSpan={5}
+                            icon={Wallet}
+                            title="لا توجد معاملات"
+                          />
                         )}
                       </TableBody>
                     </Table>
@@ -1552,37 +2200,66 @@ export default function StatementPage() {
                 <div className="rounded-xl border-2 border-[hsl(43,65%,52%)]/60 overflow-hidden">
                   <div className="bg-[hsl(220,40%,18%)] text-white px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
                     <p className="font-bold flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" /> كشف الحساب التفصيلي
+                      <FileText className="w-4 h-4 text-[hsl(43,65%,60%)]" />{" "}
+                      كشف الحساب التفصيلي
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
                         className="bg-white/10 border-[hsl(43,65%,52%)] text-white hover:bg-white/20 hover:text-white font-bold"
-                        onClick={() => clientDetail?.ledger && exportLedgerXlsx(clientDetail.ledger, clientDetail.account?.clientName ?? "", clientStmtFrom, clientStmtTo, "client")}
+                        onClick={() =>
+                          clientDetail?.ledger &&
+                          exportLedgerXlsx(
+                            clientDetail.ledger,
+                            clientDetail.account?.clientName ?? "",
+                            clientStmtFrom,
+                            clientStmtTo,
+                            "client",
+                          )
+                        }
                       >
-                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
+                        <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير
+                        Excel
                       </Button>
                       <Button
                         size="sm"
                         className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
                         onClick={() => setPrintClientStatement(true)}
                       >
-                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة الكشف
+                        <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة
+                        الكشف
                       </Button>
                     </div>
                   </div>
                   <div className="p-3 bg-muted/30 flex flex-wrap items-end gap-3 border-b border-border">
                     <div>
                       <p className="text-xs mb-1 font-medium">من تاريخ</p>
-                      <Input type="date" className="h-9 w-40" value={clientStmtFrom} onChange={(e) => setClientStmtFrom(e.target.value)} />
+                      <Input
+                        type="date"
+                        className="h-9 w-40"
+                        value={clientStmtFrom}
+                        onChange={(e) => setClientStmtFrom(e.target.value)}
+                      />
                     </div>
                     <div>
                       <p className="text-xs mb-1 font-medium">إلى تاريخ</p>
-                      <Input type="date" className="h-9 w-40" value={clientStmtTo} onChange={(e) => setClientStmtTo(e.target.value)} />
+                      <Input
+                        type="date"
+                        className="h-9 w-40"
+                        value={clientStmtTo}
+                        onChange={(e) => setClientStmtTo(e.target.value)}
+                      />
                     </div>
                     {(clientStmtFrom || clientStmtTo) && (
-                      <Button variant="ghost" size="sm" onClick={() => { setClientStmtFrom(""); setClientStmtTo(""); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setClientStmtFrom("");
+                          setClientStmtTo("");
+                        }}
+                      >
                         عرض كل الفترات
                       </Button>
                     )}
@@ -1597,10 +2274,20 @@ export default function StatementPage() {
         </Dialog>
 
         {/* Print client statement dialog */}
-        <Dialog open={printClientStatement} onOpenChange={(o) => { if (!o) setPrintClientStatement(false); }}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <Dialog
+          open={printClientStatement}
+          onOpenChange={(o) => {
+            if (!o) setPrintClientStatement(false);
+          }}
+        >
+          <DialogContent
+            className="max-w-4xl max-h-[90vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader className="no-print">
-              <DialogTitle>كشف حساب تفصيلي — {selectedClient ?? ""}</DialogTitle>
+              <DialogTitle>
+                كشف حساب تفصيلي — {selectedClient ?? ""}
+              </DialogTitle>
             </DialogHeader>
             {clientDetail?.ledger && (
               <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
@@ -1623,36 +2310,51 @@ export default function StatementPage() {
                     <tr>
                       <td>
                         <div className="space-y-4">
-                  {/* Statement title band */}
-                  <div className="flex items-stretch gap-2">
-                    <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
-                      كشف حساب تفصيلي للعميل: <span className="text-[hsl(43,70%,65%)]">{clientDetail.account.clientName}</span>
-                    </div>
-                    <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
-                      {clientStmtFrom || clientStmtTo
-                        ? `خلال الفترة من ${clientStmtFrom ? La(clientStmtFrom) : "البداية"} إلى ${clientStmtTo ? La(clientStmtTo) : "اليوم"}`
-                        : "عن كامل الفترة حتى تاريخه"}
-                    </div>
-                  </div>
-                  <LedgerTable ledger={clientDetail.ledger} />
-                  {/* Signature & stamp */}
-                  <div className="flex justify-between items-end pt-4 text-sm">
-                    <div className="text-center">
-                      <div className="h-16 mb-1" />
-                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع العميل</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-end justify-center gap-2 h-16 mb-1">
-                        {office?.signatureImage && (
-                          <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
-                        )}
-                        {office?.stampImage && (
-                          <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
-                        )}
-                      </div>
-                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
-                    </div>
-                  </div>
+                          {/* Statement title band */}
+                          <div className="flex items-stretch gap-2">
+                            <div className="flex-1 rounded-md bg-[hsl(220,40%,18%)] text-white px-4 py-2 text-center font-bold border-2 border-[hsl(43,65%,52%)]">
+                              كشف حساب تفصيلي للعميل:{" "}
+                              <span className="text-[hsl(43,70%,65%)]">
+                                {clientDetail.account.clientName}
+                              </span>
+                            </div>
+                            <div className="rounded-md border-2 border-[hsl(220,40%,18%)] px-4 py-2 text-center text-sm font-semibold flex items-center">
+                              {clientStmtFrom || clientStmtTo
+                                ? `خلال الفترة من ${clientStmtFrom ? La(clientStmtFrom) : "البداية"} إلى ${clientStmtTo ? La(clientStmtTo) : "اليوم"}`
+                                : "عن كامل الفترة حتى تاريخه"}
+                            </div>
+                          </div>
+                          <LedgerTable ledger={clientDetail.ledger} />
+                          {/* Signature & stamp */}
+                          <div className="flex justify-between items-end pt-4 text-sm">
+                            <div className="text-center">
+                              <div className="h-16 mb-1" />
+                              <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                                توقيع العميل
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                                {office?.signatureImage && (
+                                  <img
+                                    src={office.signatureImage}
+                                    alt="توقيع المكتب"
+                                    className="max-h-[60px] w-auto object-contain"
+                                  />
+                                )}
+                                {office?.stampImage && (
+                                  <img
+                                    src={office.stampImage}
+                                    alt="ختم المكتب"
+                                    className="max-h-[64px] w-auto object-contain"
+                                  />
+                                )}
+                              </div>
+                              <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                                توقيع المكتب
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -1661,12 +2363,24 @@ export default function StatementPage() {
               </div>
             )}
             <DialogFooter className="gap-2 no-print">
-              <Button variant="outline" onClick={() => setPrintClientStatement(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setPrintClientStatement(false)}
+              >
                 إغلاق
               </Button>
               <Button
                 variant="outline"
-                onClick={() => clientDetail?.ledger && exportLedgerXlsx(clientDetail.ledger, clientDetail.account?.clientName ?? "", clientStmtFrom, clientStmtTo, "client")}
+                onClick={() =>
+                  clientDetail?.ledger &&
+                  exportLedgerXlsx(
+                    clientDetail.ledger,
+                    clientDetail.account?.clientName ?? "",
+                    clientStmtFrom,
+                    clientStmtTo,
+                    "client",
+                  )
+                }
               >
                 <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
@@ -1689,32 +2403,51 @@ export default function StatementPage() {
               <DialogTitle className="flex items-center gap-2">
                 {voucherKind === "receipt" ? (
                   <>
-                    <ArrowUpCircle className="w-5 h-5 text-emerald-600" /> سند قبض
+                    <ArrowUpCircle className="w-5 h-5 text-emerald-600" /> سند
+                    قبض
                   </>
                 ) : (
                   <>
-                    <ArrowDownCircle className="w-5 h-5 text-destructive" /> سند صرف
+                    <ArrowDownCircle className="w-5 h-5 text-destructive" /> سند
+                    صرف
                   </>
                 )}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <p className="text-sm mb-1.5 font-medium">الربط بحساب وكيل أو عميل</p>
-                <Select value={vLink || undefined} onValueChange={(v) => setVLink(v)}>
+                <p className="text-sm mb-1.5 font-medium">
+                  الربط بحساب وكيل أو عميل
+                </p>
+                <Select
+                  value={vLink || undefined}
+                  onValueChange={(v) => setVLink(v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="اختر وكيلاً أو عميلاً" />
                   </SelectTrigger>
                   <SelectContent>
                     {((agents as any[] | undefined) ?? []).map((a) => (
-                      <SelectItem key={`agent-${a.id}`} value={`agent|${a.name}`}>وكيل — {a.name}</SelectItem>
+                      <SelectItem
+                        key={`agent-${a.id}`}
+                        value={`agent|${a.name}`}
+                      >
+                        وكيل — {a.name}
+                      </SelectItem>
                     ))}
                     {((clients as any[] | undefined) ?? []).map((c) => (
-                      <SelectItem key={`client-${c.clientName}`} value={`client|${c.clientName}`}>عميل — {c.clientName}</SelectItem>
+                      <SelectItem
+                        key={`client-${c.clientName}`}
+                        value={`client|${c.clientName}`}
+                      >
+                        عميل — {c.clientName}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">سيظهر السند تلقائياً في كشف حساب الوكيل أو العميل المرتبط</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  سيظهر السند تلقائياً في كشف حساب الوكيل أو العميل المرتبط
+                </p>
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">المبلغ</p>
@@ -1728,11 +2461,19 @@ export default function StatementPage() {
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">البيان</p>
-                <Input value={vDesc} onChange={(e) => setVDesc(e.target.value)} placeholder="سبب القبض / الصرف" />
+                <Input
+                  value={vDesc}
+                  onChange={(e) => setVDesc(e.target.value)}
+                  placeholder="سبب القبض / الصرف"
+                />
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">التاريخ</p>
-                <Input type="date" value={vDate} onChange={(e) => setVDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={vDate}
+                  onChange={(e) => setVDate(e.target.value)}
+                />
               </div>
             </div>
             <DialogFooter className="gap-2">
@@ -1743,7 +2484,10 @@ export default function StatementPage() {
                 disabled={!vLink || !Number(vAmount) || addVoucher.isPending}
                 onClick={() => addVoucher.mutate()}
               >
-                {addVoucher.isPending && <Loader2 className="w-4 h-4 ml-2 animate-spin" />} حفظ
+                {addVoucher.isPending && (
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                )}{" "}
+                حفظ
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1759,7 +2503,9 @@ export default function StatementPage() {
           <DialogContent className="max-w-lg" dir="rtl">
             <DialogHeader className="no-print">
               <DialogTitle>
-                {printVoucher?.kind === "receipt" ? "سند قبض نقدية" : "سند صرف نقدية"}
+                {printVoucher?.kind === "receipt"
+                  ? "سند قبض نقدية"
+                  : "سند صرف نقدية"}
               </DialogTitle>
             </DialogHeader>
             {printVoucher && (
@@ -1767,62 +2513,84 @@ export default function StatementPage() {
                 {/* Watermark — office logo */}
                 <PrintWatermark logo={office?.officeLogo} />
                 <div className="relative space-y-5">
-                {/* Office header — unified across all printable documents */}
-                <PrintHeader
-                  office={office}
-                  details={[
-                    { label: "رقم السند", value: String(printVoucher.id) },
-                    { label: "التاريخ", value: La(printVoucher.voucherDate) },
-                  ]}
-                />
+                  {/* Office header — unified across all printable documents */}
+                  <PrintHeader
+                    office={office}
+                    details={[
+                      { label: "رقم السند", value: String(printVoucher.id) },
+                      { label: "التاريخ", value: La(printVoucher.voucherDate) },
+                    ]}
+                  />
 
-                <div className="text-center">
-                  <p className="inline-block rounded-md bg-[hsl(220,40%,18%)] text-white px-6 py-1.5 text-lg font-bold border-2 border-[hsl(43,65%,52%)]">
-                    {printVoucher.kind === "receipt" ? "سند قبض نقدية" : "سند صرف نقدية"}
-                  </p>
-                </div>
+                  <div className="text-center">
+                    <p className="inline-block rounded-md bg-[hsl(220,40%,18%)] text-white px-6 py-1.5 text-lg font-bold border-2 border-[hsl(43,65%,52%)]">
+                      {printVoucher.kind === "receipt"
+                        ? "سند قبض نقدية"
+                        : "سند صرف نقدية"}
+                    </p>
+                  </div>
 
-                <div className="text-sm">
-                  <span className="font-semibold text-[hsl(220,40%,18%)]">
-                    {printVoucher.kind === "receipt" ? "استلمنا من الأخ: " : "صرفنا للأخ: "}
-                  </span>
-                  {printVoucher.partyName}
-                  {printVoucher.partyType === "agent" && (
-                    <span className="mr-2 text-xs text-[hsl(43,50%,40%)]">(وكيل)</span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-[hsl(220,40%,18%)]">المبلغ:</span>
-                  <span className="border-2 border-[hsl(43,65%,52%)] bg-[hsl(43,65%,52%)]/10 text-[hsl(220,40%,18%)] rounded px-4 py-2 font-bold text-lg">
-                    {nt(Number(printVoucher.amount))} ريال سعودي
-                  </span>
-                </div>
-
-                {printVoucher.description && (
                   <div className="text-sm">
-                    <span className="font-semibold text-[hsl(220,40%,18%)]">وذلك عن: </span>
-                    {printVoucher.description}
+                    <span className="font-semibold text-[hsl(220,40%,18%)]">
+                      {printVoucher.kind === "receipt"
+                        ? "قبضنا من : "
+                        : "صرفنا ل: "}
+                    </span>
+                    {printVoucher.partyName}
+                    {printVoucher.partyType === "agent" && (
+                      <span className="mr-2 text-xs text-[hsl(43,50%,40%)]">
+                        (وكيل)
+                      </span>
+                    )}
                   </div>
-                )}
 
-                <div className="flex justify-between items-end pt-6 text-sm">
-                  <div className="text-center">
-                    <div className="h-16 mb-1" />
-                    <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المستلم</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[hsl(220,40%,18%)]">
+                      المبلغ:
+                    </span>
+                    <span className="border-2 border-[hsl(43,65%,52%)] bg-[hsl(43,65%,52%)]/10 text-[hsl(220,40%,18%)] rounded px-4 py-2 font-bold text-lg">
+                      {nt(Number(printVoucher.amount))} ريال سعودي
+                    </span>
                   </div>
-                  <div className="text-center">
-                    <div className="flex items-end justify-center gap-2 h-16 mb-1">
-                      {office?.signatureImage && (
-                        <img src={office.signatureImage} alt="توقيع المكتب" className="max-h-[60px] w-auto object-contain" />
-                      )}
-                      {office?.stampImage && (
-                        <img src={office.stampImage} alt="ختم المكتب" className="max-h-[64px] w-auto object-contain" />
-                      )}
+
+                  {printVoucher.description && (
+                    <div className="text-sm">
+                      <span className="font-semibold text-[hsl(220,40%,18%)]">
+                        وذلك عن:{" "}
+                      </span>
+                      {printVoucher.description}
                     </div>
-                    <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">توقيع المكتب</p>
+                  )}
+
+                  <div className="flex justify-between items-end pt-6 text-sm">
+                    <div className="text-center">
+                      <div className="h-16 mb-1" />
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                        توقيع المستلم
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-end justify-center gap-2 h-16 mb-1">
+                        {office?.signatureImage && (
+                          <img
+                            src={office.signatureImage}
+                            alt="توقيع المكتب"
+                            className="max-h-[60px] w-auto object-contain"
+                          />
+                        )}
+                        {office?.stampImage && (
+                          <img
+                            src={office.stampImage}
+                            alt="ختم المكتب"
+                            className="max-h-[64px] w-auto object-contain"
+                          />
+                        )}
+                      </div>
+                      <p className="border-t border-[hsl(220,40%,18%)] pt-1 text-[hsl(220,40%,18%)] font-medium w-32">
+                        توقيع المكتب
+                      </p>
+                    </div>
                   </div>
-                </div>
                 </div>
               </div>
             )}
