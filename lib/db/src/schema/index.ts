@@ -7,4 +7,5 @@ export * from "./office_settings";
 export * from "./agents";
 export * from "./vouchers";
 export * from "./client_accounts";
+export * from "./account_name_aliases";
 export * from "./backups";

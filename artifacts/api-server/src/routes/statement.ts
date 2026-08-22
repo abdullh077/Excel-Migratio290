@@ -4,6 +4,12 @@ import { db, agentsTable, agentPaymentsTable, ledgerEntriesTable, umrahClientsTa
 import { eq, and, ne, isNull, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
 import {
+  isRetiredAccountName,
+  lockAccountNames,
+  recordAccountRename,
+  resolveRenamedAccountName,
+} from "../lib/clientAccounts.js";
+import {
   UpdateAgentParams, DeleteAgentParams,
   GetAgentDetailsParams, CreateAgentPaymentBody, CreateAgentPaymentParams,
   DeleteAgentPaymentParams, GetClientDetailsQueryParams,
@@ -49,13 +55,6 @@ function parseDate(value: string | undefined, label: string): Date {
     throw new Error(`${label} غير صحيح`);
   }
   return date;
-}
-
-async function lockNames(tx: any, scope: string, officeId: number, ...names: string[]): Promise<void> {
-  const keys = [...new Set(names.map((name) => `${scope}:${officeId}:${name.trim()}`))].sort();
-  for (const key of keys) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
-  }
 }
 
 // Agent names open to all office users (for form pickers)
@@ -138,7 +137,8 @@ router.post("/statement/agents", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
   const row = await db.transaction(async (tx) => {
-    await lockNames(tx, "agent", officeId, parsed.data.name);
+    await lockAccountNames(tx, officeId, [{ scope: "agent", name: parsed.data.name }]);
+    if (await resolveRenamedAccountName(tx, officeId, "agent", parsed.data.name) !== parsed.data.name) return null;
     const duplicate = await tx.select({ id: agentsTable.id }).from(agentsTable)
       .where(and(eq(agentsTable.userId, officeId), sql`btrim(${agentsTable.name}) = btrim(${parsed.data.name})`));
     if (duplicate.length) return null;
@@ -164,11 +164,17 @@ router.put("/statement/agents/:id", async (req, res): Promise<void> => {
   const newName = parsed.data.name;
 
   const row = await db.transaction(async (tx) => {
-    await lockNames(tx, "agent-id", officeId, String(params.data.id));
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"agent-id:" + officeId + ":" + params.data.id}))`);
     const [existing] = await tx.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
     if (!existing) return { kind: "not-found" as const, row: null };
     const oldName = existing.name;
-    await lockNames(tx, "agent", officeId, oldName, newName);
+    await lockAccountNames(tx, officeId, [
+      { scope: "agent", name: oldName },
+      { scope: "agent", name: newName },
+    ]);
+    if (await isRetiredAccountName(tx, officeId, "agent", newName)) {
+      return { kind: "conflict" as const, row: null };
+    }
     const duplicate = await tx.select({ id: agentsTable.id }).from(agentsTable)
       .where(and(
         eq(agentsTable.userId, officeId),
@@ -187,6 +193,7 @@ router.put("/statement/agents/:id", async (req, res): Promise<void> => {
     // Transactions and standalone vouchers link agents by name, so a rename
     // must retag every linked row in the same transaction.
     if (newName !== oldName) {
+      await recordAccountRename(tx, officeId, "agent", oldName, newName);
       await tx.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${oldName})`));
       await tx.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${oldName})`));
       await tx.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`));
@@ -361,32 +368,39 @@ router.post("/statement/agents/:id/payments", async (req, res): Promise<void> =>
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
 
-  const [agent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
-  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-
   const { createVoucher: doCreateVoucher, paidAt, ...rest } = parsed.data as any;
-  const [payment] = await db.insert(agentPaymentsTable).values({
-    ...rest,
-    userId: officeId,
-    agentId: agent.id,
-    paidAt: paidAt ? new Date(paidAt) : new Date(),
-  }).returning();
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"agent-id:" + officeId + ":" + params.data.id}))`);
+    const [agent] = await tx.select().from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
+    if (!agent) return null;
+    await lockAccountNames(tx, officeId, [{ scope: "agent", name: agent.name }]);
 
-  let voucherId: number | null = null;
-  if (doCreateVoucher) {
-    const kind = rest.direction === "from_agent" ? "receipt" : "payment";
-    const [v] = await db.insert(vouchersTable).values({
+    const [payment] = await tx.insert(agentPaymentsTable).values({
+      ...rest,
       userId: officeId,
-      kind,
-      partyType: "agent",
-      partyName: agent.name,
-      amount: rest.amount,
-      description: rest.notes ?? null,
-      voucherDate: new Date(),
-      agentPaymentId: payment.id,
+      agentId: agent.id,
+      paidAt: paidAt ? new Date(paidAt) : new Date(),
     }).returning();
-    voucherId = v.id;
-  }
+    let voucherId: number | null = null;
+    if (doCreateVoucher) {
+      const kind = rest.direction === "from_agent" ? "receipt" : "payment";
+      const [v] = await tx.insert(vouchersTable).values({
+        userId: officeId,
+        kind,
+        partyType: "agent",
+        partyName: agent.name,
+        amount: rest.amount,
+        description: rest.notes ?? null,
+        voucherDate: new Date(),
+        agentPaymentId: payment.id,
+      }).returning();
+      voucherId = v.id;
+    }
+    return { payment, voucherId };
+  });
+  if (!result) { res.status(404).json({ error: "Agent not found" }); return; }
+  const { payment, voucherId } = result;
 
   res.status(201).json({ id: payment.id, agentId: payment.agentId, amount: Number(payment.amount), direction: payment.direction, paidAt: payment.paidAt.toISOString(), notes: payment.notes, voucherId, createdAt: payment.createdAt.toISOString() });
 });
@@ -408,16 +422,20 @@ router.post("/statement/clients", async (req, res): Promise<void> => {
   }).safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
-  const [existing] = await db.select().from(clientAccountsTable)
-    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, body.data.clientName)));
-  if (existing) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
-
-  const [row] = await db.insert(clientAccountsTable).values({
-    userId: officeId,
-    clientName: body.data.clientName,
-    phone: body.data.phone ?? null,
-    notes: body.data.notes ?? null,
-  }).returning();
+  const row = await db.transaction(async (tx) => {
+    await lockAccountNames(tx, officeId, [{ scope: "client", name: body.data.clientName }]);
+    if (await resolveRenamedAccountName(tx, officeId, "client", body.data.clientName) !== body.data.clientName) return null;
+    const [existing] = await tx.select({ id: clientAccountsTable.id }).from(clientAccountsTable)
+      .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${body.data.clientName})`));
+    if (existing) return null;
+    return (await tx.insert(clientAccountsTable).values({
+      userId: officeId,
+      clientName: body.data.clientName,
+      phone: body.data.phone ?? null,
+      notes: body.data.notes ?? null,
+    }).returning())[0];
+  });
+  if (!row) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
   res.status(201).json({ id: row.id, clientName: row.clientName, phone: row.phone, notes: row.notes });
 });
 
@@ -429,7 +447,13 @@ router.put("/statement/clients", async (req, res): Promise<void> => {
   const { oldName, newName } = body.data;
 
   const result = await db.transaction(async (tx) => {
-    await lockNames(tx, "client", officeId, oldName, newName);
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: oldName },
+      { scope: "client", name: newName },
+    ]);
+    if (await isRetiredAccountName(tx, officeId, "client", newName)) {
+      return { kind: "conflict" as const, account: null };
+    }
     const [manual] = await tx.select().from(clientAccountsTable)
       .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${oldName})`));
     const sameName = oldName.trim() === newName.trim();
@@ -450,7 +474,7 @@ router.put("/statement/clients", async (req, res): Promise<void> => {
     }
 
     const visaHit = await tx.select({ id: otherVisasTable.id }).from(otherVisasTable)
-      .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`)).limit(1);
+      .where(and(eq(otherVisasTable.userId, officeId), sql`btrim(coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName})) = btrim(${oldName})`)).limit(1);
     const umrahHit = await tx.select({ id: umrahClientsTable.id }).from(umrahClientsTable)
       .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.client}) = btrim(${oldName})`)).limit(1);
     const voucherHit = await tx.select({ id: vouchersTable.id }).from(vouchersTable)
@@ -475,8 +499,9 @@ router.put("/statement/clients", async (req, res): Promise<void> => {
         }).returning())[0];
 
     if (newName !== oldName) {
+      await recordAccountRename(tx, officeId, "client", oldName, newName);
       await tx.update(otherVisasTable).set({ client: newName })
-        .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`));
+        .where(and(eq(otherVisasTable.userId, officeId), sql`btrim(coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName})) = btrim(${oldName})`));
       await tx.update(umrahClientsTable).set({ client: newName })
         .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.client}) = btrim(${oldName})`));
       await tx.update(vouchersTable).set({ partyName: newName })
@@ -864,22 +889,32 @@ router.post("/statement/opening", async (req, res): Promise<void> => {
   const { partyType, name, amount } = parsed.data;
 
   if (partyType === "agent") {
-    const [row] = await db.update(agentsTable)
-      .set({ openingBalance: String(amount) })
-      .where(and(eq(agentsTable.userId, officeId), eq(agentsTable.name, name)))
-      .returning();
+    const [row] = await db.transaction(async (tx) => {
+      await lockAccountNames(tx, officeId, [{ scope: "agent", name }]);
+      const canonicalName = await resolveRenamedAccountName(tx, officeId, "agent", name);
+      await lockAccountNames(tx, officeId, [{ scope: "agent", name: canonicalName }]);
+      return tx.update(agentsTable)
+        .set({ openingBalance: String(amount) })
+        .where(and(eq(agentsTable.userId, officeId), sql`btrim(${agentsTable.name}) = btrim(${canonicalName})`))
+        .returning();
+    });
     if (!row) { res.status(404).json({ error: "الوكيل غير موجود" }); return; }
     res.json({ partyType, name: row.name, amount: Number(row.openingBalance) });
     return;
   }
 
   // Client: upsert into manual client accounts so it exists even before any visa.
-  const [existing] = await db.select().from(clientAccountsTable)
-    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, name)));
-  const [row] = existing
-    ? await db.update(clientAccountsTable).set({ openingBalance: String(amount) })
-        .where(eq(clientAccountsTable.id, existing.id)).returning()
-    : await db.insert(clientAccountsTable).values({ userId: officeId, clientName: name, openingBalance: String(amount) }).returning();
+  const [row] = await db.transaction(async (tx) => {
+    await lockAccountNames(tx, officeId, [{ scope: "client", name }]);
+    const canonicalName = await resolveRenamedAccountName(tx, officeId, "client", name);
+    await lockAccountNames(tx, officeId, [{ scope: "client", name: canonicalName }]);
+    const [existing] = await tx.select().from(clientAccountsTable)
+      .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${canonicalName})`));
+    return existing
+      ? tx.update(clientAccountsTable).set({ openingBalance: String(amount) })
+          .where(eq(clientAccountsTable.id, existing.id)).returning()
+      : tx.insert(clientAccountsTable).values({ userId: officeId, clientName: canonicalName, openingBalance: String(amount) }).returning();
+  });
   res.json({ partyType, name: row.clientName, amount: Number(row.openingBalance) });
 });
 

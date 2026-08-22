@@ -19,6 +19,26 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx">
+      <div id="root"></div>
+        <script type="module" src="/src/main.tsx">
+        </script>
+
+        <!-- الصق الكود هنا -->
+        <script>
+          if ('serviceWorker' in navigator) {
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+              if (!refreshing) {
+                refreshing = true;
+                window.location.reload();
+              }
+            });
+          }
+        </script>
+
+      </body>
+      </html>
+    </script>
   </body>
 </html>

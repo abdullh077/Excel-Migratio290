@@ -8,6 +8,13 @@ description: How agents/payments/ledger link to transactions and who can see the
 - Financial endpoints (`/statement/*`) are owner+provider only (`requireOwner`); only `/statement/agent-names` is open to subs (`requireOffice`) for the datalist pickers in umrah/visas forms.
 - Ledger (ledger_entries) is general office income/expense; monthly summary joins tx months with ledger months (FULL OUTER JOIN on YYYY-MM).
 
+## Rename/save concurrency
+Name-based transaction links must use the same sorted PostgreSQL advisory transaction locks as account renames. Visa client matching falls back from a blank `client` to `clientName`; that effective name is the lock key too. A durable alias maps renamed names to their canonical target, so delayed saves and full-form edits resolve to the current name instead of recreating the old one.
+
+**Why:** Agent/client names are text fields rather than foreign keys, so an otherwise atomic rename can miss an in-flight save or be undone by a stale full edit.
+
+**How to apply:** Any new create/update path that writes an agent, client, or client/agent voucher name must lock the old and requested normalized names, resolve an alias before ensuring related accounts, and write the transaction in one DB transaction.
+
 ## Client statement vouchers (2026-08-01)
 Client balance = Σ(sale − receivedFromClient) + voucherPayments − voucherReceipts.
 Only standalone client vouchers count: partyType <> 'agent' AND agent_payment_id IS NULL — agent-linked vouchers stay on the agent statement (double-count guard).

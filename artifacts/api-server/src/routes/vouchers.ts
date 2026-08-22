@@ -2,7 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, vouchersTable, agentsTable, agentPaymentsTable, clientAccountsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
-import { ensureClientAccount, ensureAgent } from "../lib/clientAccounts.js";
+import {
+  ensureClientAccount,
+  ensureAgent,
+  lockAccountNames,
+  normalizeAccountName,
+  resolveRenamedAccountName,
+} from "../lib/clientAccounts.js";
 import { requireOffice } from "../lib/auth.js";
 import { DeleteVoucherParams, GetVoucherParams, ListVouchersQueryParams } from "@workspace/api-zod";
 
@@ -56,10 +62,20 @@ router.post("/vouchers", async (req, res): Promise<void> => {
   const { voucherDate, ...rest } = parsed.data;
   let date: Date;
   try { date = parseVoucherDate(voucherDate); } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-  // ضمان الترابط: أي سند مرتبط بوكيل أو عميل يُنشئ حسابه تلقائياً إن لم يوجد
-  if (rest.partyType === "agent") await ensureAgent(officeId, rest.partyName);
-  if (rest.partyType === "client") await ensureClientAccount(officeId, rest.partyName, undefined);
-  const [row] = await db.insert(vouchersTable).values({ ...rest, amount: String(rest.amount), userId: officeId, voucherDate: date }).returning();
+  const row = await db.transaction(async (tx) => {
+    const names = rest.partyType === "agent"
+      ? [{ scope: "agent" as const, name: rest.partyName }]
+      : rest.partyType === "client"
+        ? [{ scope: "client" as const, name: rest.partyName }]
+        : [];
+    await lockAccountNames(tx, officeId, names);
+    // ضمان الترابط: أي سند مرتبط بوكيل أو عميل يُنشئ حسابه تلقائياً إن لم يوجد
+    if (rest.partyType === "agent") rest.partyName = await ensureAgent(tx, officeId, rest.partyName);
+    if (rest.partyType === "client") rest.partyName = await ensureClientAccount(tx, officeId, rest.partyName, undefined);
+    return (await tx.insert(vouchersTable)
+      .values({ ...rest, amount: String(rest.amount), userId: officeId, voucherDate: date })
+      .returning())[0];
+  });
   res.status(201).json(toVoucher(row));
 });
 
@@ -73,9 +89,31 @@ router.put("/vouchers/:id", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
 
   try {
-    const row = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
+      const [beforeLock] = await tx.select().from(vouchersTable).where(and(eq(vouchersTable.id, params.data.id), eq(vouchersTable.userId, officeId)));
+      if (!beforeLock) return { kind: "not-found" as const, row: null };
+      const names = [
+        beforeLock.partyType === "agent" ? { scope: "agent" as const, name: beforeLock.partyName } : null,
+        beforeLock.partyType === "client" ? { scope: "client" as const, name: beforeLock.partyName } : null,
+        parsed.data.partyType === "agent" ? { scope: "agent" as const, name: parsed.data.partyName } : null,
+        parsed.data.partyType === "client" ? { scope: "client" as const, name: parsed.data.partyName } : null,
+      ].filter((name): name is { scope: "agent" | "client"; name: string } => name !== null);
+      await lockAccountNames(tx, officeId, names);
+      const canonicalPartyName = parsed.data.partyType === "agent" || parsed.data.partyType === "client"
+        ? await resolveRenamedAccountName(tx, officeId, parsed.data.partyType, parsed.data.partyName)
+        : parsed.data.partyName;
+      if (parsed.data.partyType === "agent" || parsed.data.partyType === "client") {
+        await lockAccountNames(tx, officeId, [{ scope: parsed.data.partyType, name: canonicalPartyName }]);
+      }
       const [existing] = await tx.select().from(vouchersTable).where(and(eq(vouchersTable.id, params.data.id), eq(vouchersTable.userId, officeId)));
-      if (!existing) return null;
+      if (!existing) return { kind: "not-found" as const, row: null };
+      if (
+        (existing.partyType !== beforeLock.partyType || normalizeAccountName(existing.partyName) !== normalizeAccountName(beforeLock.partyName)) &&
+        parsed.data.partyType === beforeLock.partyType &&
+        normalizeAccountName(canonicalPartyName) === normalizeAccountName(beforeLock.partyName)
+      ) {
+        return { kind: "stale-name" as const, row: null };
+      }
 
       // A voucher linked to an agent payment is the payment's accounting view.
       // Keep both rows synchronized, and do not allow it to become a client or
@@ -93,7 +131,7 @@ router.put("/vouchers/:id", async (req, res): Promise<void> => {
 
       if (parsed.data.partyType === "agent") {
         const [agent] = await tx.select({ id: agentsTable.id }).from(agentsTable)
-          .where(and(eq(agentsTable.userId, officeId), sql`btrim(${agentsTable.name}) = btrim(${parsed.data.partyName})`));
+          .where(and(eq(agentsTable.userId, officeId), sql`btrim(${agentsTable.name}) = btrim(${canonicalPartyName})`));
         if (!agent) throw new Error("الوكيل غير موجود");
         if (agentPayment) {
           await tx.update(agentPaymentsTable).set({
@@ -105,25 +143,22 @@ router.put("/vouchers/:id", async (req, res): Promise<void> => {
           }).where(and(eq(agentPaymentsTable.id, agentPayment.id), eq(agentPaymentsTable.userId, officeId)));
         }
       } else if (parsed.data.partyType === "client") {
-        const [client] = await tx.select({ id: clientAccountsTable.id }).from(clientAccountsTable)
-          .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${parsed.data.partyName})`));
-        if (!client) {
-          await tx.insert(clientAccountsTable).values({ userId: officeId, clientName: parsed.data.partyName, openingBalance: "0" });
-        }
+        await ensureClientAccount(tx, officeId, canonicalPartyName, undefined);
       }
 
       const [updated] = await tx.update(vouchersTable).set({
         kind: parsed.data.kind,
         partyType: parsed.data.partyType,
-        partyName: parsed.data.partyName,
+        partyName: canonicalPartyName,
         amount: String(parsed.data.amount),
         description: parsed.data.description ?? null,
         voucherDate: date,
       }).where(and(eq(vouchersTable.id, existing.id), eq(vouchersTable.userId, officeId))).returning();
-      return updated;
+      return { kind: "ok" as const, row: updated };
     });
-    if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(toVoucher(row));
+    if (result.kind === "stale-name") { res.status(409).json({ error: "تم تغيير اسم العميل أو الوكيل، أعد تحميل السند ثم حاول مجدداً" }); return; }
+    if (result.kind === "not-found" || !result.row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(toVoucher(result.row));
   } catch (error) {
     res.status(400).json({ error: (error as Error).message || "تعذر تعديل السند" });
   }

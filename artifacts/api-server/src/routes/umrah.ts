@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, umrahClientsTable } from "@workspace/db";
 import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
-import { ensureClientAccount, ensureAgent } from "../lib/clientAccounts.js";
+import { ensureClientAccount, ensureAgent, lockAccountNames, normalizeAccountName, resolveRenamedAccountName } from "../lib/clientAccounts.js";
 import {
   CreateUmrahClientBody,
   UpdateUmrahClientBody,
@@ -88,24 +88,30 @@ router.post("/umrah", async (req, res): Promise<void> => {
   // Normalize name fields so statement matching (by name) never misses a
   // transaction because of stray leading/trailing spaces.
   for (const k of ["clientName", "client", "agent"]) if (typeof rest[k] === "string") rest[k] = rest[k].trim();
-  await ensureClientAccount(officeId, rest.client, openingBalance);
-  await ensureAgent(officeId, rest.agent);
   // Normalize empty/blank clientRequestId to null so it never collides on the
   // unique index (empty strings would otherwise dedup to the first-ever record
   // and block all subsequent creates).
   const clientRequestId =
     typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
 
-  const [row] = await db
-    .insert(umrahClientsTable)
-    .values({
-      ...rest,
-      userId: officeId,
-      entryDate: entryDate ? new Date(entryDate) : null,
-      clientRequestId,
-    })
-    .onConflictDoNothing()
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: rest.client },
+      { scope: "agent", name: rest.agent },
+    ]);
+    rest.client = await ensureClientAccount(tx, officeId, rest.client, openingBalance);
+    rest.agent = await ensureAgent(tx, officeId, rest.agent);
+    return (await tx
+      .insert(umrahClientsTable)
+      .values({
+        ...rest,
+        userId: officeId,
+        entryDate: entryDate ? new Date(entryDate) : null,
+        clientRequestId,
+      })
+      .onConflictDoNothing()
+      .returning())[0] ?? null;
+  });
 
   if (!row) {
     // conflict = idempotent: return existing (only when a real request id was sent)
@@ -144,12 +150,57 @@ router.put("/umrah/:id", async (req, res): Promise<void> => {
   const openingBalance = values.openingBalance as number | undefined;
   delete values.openingBalance;
   for (const k of ["clientName", "client", "agent"]) if (typeof values[k] === "string") values[k] = (values[k] as string).trim();
-  await ensureClientAccount(req.session.officeId!, values.client as string | undefined, openingBalance);
-  await ensureAgent(req.session.officeId!, values.agent as string | undefined);
   if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
-
-  const [row] = await db.update(umrahClientsTable).set(values as any).where(and(eq(umrahClientsTable.id, params.data.id), eq(umrahClientsTable.userId, req.session.officeId!))).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  const officeId = req.session.officeId!;
+  const result = await db.transaction(async (tx) => {
+    const [beforeLock] = await tx.select().from(umrahClientsTable)
+      .where(and(eq(umrahClientsTable.id, params.data.id), eq(umrahClientsTable.userId, officeId)));
+    if (!beforeLock) return { kind: "not-found" as const, row: null };
+    const requestedClient = values.client !== undefined
+      ? values.client as string
+      : undefined;
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: beforeLock.client },
+      { scope: "client", name: requestedClient },
+      { scope: "agent", name: beforeLock.agent },
+      { scope: "agent", name: values.agent as string | undefined },
+    ]);
+    const canonicalClient = requestedClient === undefined
+      ? undefined
+      : await resolveRenamedAccountName(tx, officeId, "client", requestedClient);
+    const canonicalAgent = values.agent === undefined
+      ? undefined
+      : await resolveRenamedAccountName(tx, officeId, "agent", values.agent as string);
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: canonicalClient },
+      { scope: "agent", name: canonicalAgent },
+    ]);
+    if (canonicalClient !== undefined) values.client = canonicalClient;
+    if (canonicalAgent !== undefined) values.agent = canonicalAgent;
+    const [current] = await tx.select().from(umrahClientsTable)
+      .where(and(eq(umrahClientsTable.id, params.data.id), eq(umrahClientsTable.userId, officeId)));
+    if (!current) return { kind: "not-found" as const, row: null };
+    if (
+      (requestedClient !== undefined &&
+        normalizeAccountName(current.client) !== normalizeAccountName(beforeLock.client) &&
+        normalizeAccountName(requestedClient) === normalizeAccountName(beforeLock.client)) ||
+      (values.agent !== undefined &&
+        normalizeAccountName(current.agent) !== normalizeAccountName(beforeLock.agent) &&
+        normalizeAccountName(values.agent as string) === normalizeAccountName(beforeLock.agent))
+    ) {
+      return { kind: "stale-name" as const, row: null };
+    }
+    if (values.client !== undefined) values.client = await ensureClientAccount(tx, officeId, values.client as string, openingBalance);
+    if (values.agent !== undefined) values.agent = await ensureAgent(tx, officeId, values.agent as string);
+    const [row] = await tx.update(umrahClientsTable)
+      .set(values as any)
+      .where(and(eq(umrahClientsTable.id, params.data.id), eq(umrahClientsTable.userId, officeId)))
+      .returning();
+    return { kind: "ok" as const, row: row ?? null };
+  });
+  if (result.kind === "stale-name") { res.status(409).json({ error: "تم تغيير اسم العميل أو الوكيل، أعد تحميل المعاملة ثم حاول مجدداً" }); return; }
+  if (result.kind === "not-found" || !result.row) { res.status(404).json({ error: "Not found" }); return; }
+  const row = result.row;
   res.json({ ...row, purchasePrice: Number(row.purchasePrice), salePrice: Number(row.salePrice), profit: Number(row.salePrice) - Number(row.purchasePrice), status: computeStatus(row), entryDate: row.entryDate ? row.entryDate.toISOString() : null, createdAt: row.createdAt.toISOString() });
 });
 

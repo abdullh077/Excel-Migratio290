@@ -2,7 +2,14 @@ import { Router } from "express";
 import { db, otherVisasTable } from "@workspace/db";
 import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { requireOffice } from "../lib/auth.js";
-import { ensureClientAccount, ensureAgent } from "../lib/clientAccounts.js";
+import {
+  effectiveVisaClientName,
+  ensureClientAccount,
+  ensureAgent,
+  lockAccountNames,
+  normalizeAccountName,
+  resolveRenamedAccountName,
+} from "../lib/clientAccounts.js";
 import {
   CreateVisaBody,
   UpdateVisaBody,
@@ -77,14 +84,26 @@ router.post("/visas", async (req, res): Promise<void> => {
   // Normalize name fields so statement matching (by name) never misses a
   // transaction because of stray leading/trailing spaces.
   for (const k of ["clientName", "client", "agent"]) if (typeof rest[k] === "string") rest[k] = rest[k].trim();
-  await ensureClientAccount(officeId, rest.client, openingBalance);
-  await ensureAgent(officeId, rest.agent);
   // Normalize empty/blank clientRequestId to null so it never collides on the
   // unique index (empty strings would otherwise dedup to the first-ever record
   // and block all subsequent creates).
   const clientRequestId =
     typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
-  const [row] = await db.insert(otherVisasTable).values({ ...rest, userId: officeId, clientRequestId }).onConflictDoNothing().returning();
+  const effectiveClient = effectiveVisaClientName(rest.client, rest.clientName);
+  const row = await db.transaction(async (tx) => {
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: effectiveClient },
+      { scope: "agent", name: rest.agent },
+    ]);
+    const canonicalClient = await resolveRenamedAccountName(tx, officeId, "client", effectiveClient);
+    await lockAccountNames(tx, officeId, [{ scope: "client", name: canonicalClient }]);
+    if (rest.client || canonicalClient !== effectiveClient) rest.client = await ensureClientAccount(tx, officeId, canonicalClient, openingBalance);
+    rest.agent = await ensureAgent(tx, officeId, rest.agent);
+    return (await tx.insert(otherVisasTable)
+      .values({ ...rest, userId: officeId, clientRequestId })
+      .onConflictDoNothing()
+      .returning())[0] ?? null;
+  });
   if (!row) {
     if (clientRequestId) {
       const [existing] = await db.select().from(otherVisasTable).where(eq(otherVisasTable.clientRequestId, clientRequestId));
@@ -113,12 +132,64 @@ router.put("/visas/:id", async (req, res): Promise<void> => {
   const openingBalance = values.openingBalance as number | undefined;
   delete values.openingBalance;
   for (const k of ["clientName", "client", "agent"]) if (typeof values[k] === "string") values[k] = (values[k] as string).trim();
-  await ensureClientAccount(req.session.officeId!, values.client as string | undefined, openingBalance);
-  await ensureAgent(req.session.officeId!, values.agent as string | undefined);
   if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
-  const [row] = await db.update(otherVisasTable).set(values as any).where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, req.session.officeId!))).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(toVisa(row));
+  const officeId = req.session.officeId!;
+  const result = await db.transaction(async (tx) => {
+    // Read once to collect every possible lock, then read again after the
+    // locks. A full-form update containing a name that was just renamed must
+    // never restore the obsolete name.
+    const [beforeLock] = await tx.select().from(otherVisasTable)
+      .where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, officeId)));
+    if (!beforeLock) return { kind: "not-found" as const, row: null };
+    const changesClient = values.client !== undefined || values.clientName !== undefined;
+    const requestedClient = changesClient
+      ? effectiveVisaClientName(
+          values.client as string | undefined ?? beforeLock.client,
+          values.clientName as string | undefined ?? beforeLock.clientName,
+        )
+      : undefined;
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: effectiveVisaClientName(beforeLock.client, beforeLock.clientName) },
+      { scope: "client", name: requestedClient },
+      { scope: "agent", name: beforeLock.agent },
+      { scope: "agent", name: values.agent as string | undefined },
+    ]);
+    const canonicalClient = requestedClient === undefined
+      ? undefined
+      : await resolveRenamedAccountName(tx, officeId, "client", requestedClient);
+    const canonicalAgent = values.agent === undefined
+      ? undefined
+      : await resolveRenamedAccountName(tx, officeId, "agent", values.agent as string);
+    await lockAccountNames(tx, officeId, [
+      { scope: "client", name: canonicalClient },
+      { scope: "agent", name: canonicalAgent },
+    ]);
+    if (canonicalClient !== undefined && canonicalClient !== requestedClient) values.client = canonicalClient;
+    if (canonicalAgent !== undefined) values.agent = canonicalAgent;
+    const [current] = await tx.select().from(otherVisasTable)
+      .where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, officeId)));
+    if (!current) return { kind: "not-found" as const, row: null };
+    const clientWasRenamed =
+      effectiveVisaClientName(current.client, current.clientName) !==
+      effectiveVisaClientName(beforeLock.client, beforeLock.clientName);
+    const agentWasRenamed = normalizeAccountName(current.agent) !== normalizeAccountName(beforeLock.agent);
+    if (
+      (changesClient && clientWasRenamed && requestedClient === effectiveVisaClientName(beforeLock.client, beforeLock.clientName)) ||
+      (values.agent !== undefined && agentWasRenamed && normalizeAccountName(values.agent as string) === normalizeAccountName(beforeLock.agent))
+    ) {
+      return { kind: "stale-name" as const, row: null };
+    }
+    if (values.client !== undefined) values.client = await ensureClientAccount(tx, officeId, values.client as string, openingBalance);
+    if (values.agent !== undefined) values.agent = await ensureAgent(tx, officeId, values.agent as string);
+    const [row] = await tx.update(otherVisasTable)
+      .set(values as any)
+      .where(and(eq(otherVisasTable.id, params.data.id), eq(otherVisasTable.userId, officeId)))
+      .returning();
+    return { kind: "ok" as const, row: row ?? null };
+  });
+  if (result.kind === "stale-name") { res.status(409).json({ error: "تم تغيير اسم العميل أو الوكيل، أعد تحميل المعاملة ثم حاول مجدداً" }); return; }
+  if (result.kind === "not-found" || !result.row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(toVisa(result.row));
 });
 
 router.delete("/visas/:id", async (req, res): Promise<void> => {
