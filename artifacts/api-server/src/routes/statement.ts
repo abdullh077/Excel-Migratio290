@@ -2,15 +2,61 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, agentsTable, agentPaymentsTable, ledgerEntriesTable, umrahClientsTable, otherVisasTable, vouchersTable, clientAccountsTable } from "@workspace/db";
 import { eq, and, ne, isNull, sql } from "drizzle-orm";
-import { requireOffice, requireOwner } from "../lib/auth.js";
+import { requireOffice } from "../lib/auth.js";
 import {
-  CreateAgentBody, UpdateAgentBody, UpdateAgentParams, DeleteAgentParams,
+  UpdateAgentParams, DeleteAgentParams,
   GetAgentDetailsParams, CreateAgentPaymentBody, CreateAgentPaymentParams,
   DeleteAgentPaymentParams, GetClientDetailsQueryParams,
-  CreateLedgerEntryBody, DeleteLedgerEntryParams,
+  DeleteLedgerEntryParams,
 } from "@workspace/api-zod";
 
 const router = Router();
+
+const MAX_MONEY = 9_999_999_999.99;
+const moneyNumber = z.number().finite().refine(
+  (value) => Math.abs(value) <= MAX_MONEY && Math.abs(Math.round(value * 100) - value * 100) < 0.000001,
+  "المبلغ يجب أن لا يتجاوز 9,999,999,999.99 وبحد أقصى منزلتين عشريتين",
+);
+const positiveMoney = moneyNumber.refine((value) => value > 0, "المبلغ يجب أن يكون أكبر من صفر");
+
+const AgentEditBody = z.object({
+  name: z.string().trim().min(2, "اسم الوكيل يجب أن يتكون من حرفين على الأقل"),
+  phone: z.string().trim().nullish(),
+  notes: z.string().trim().nullish(),
+  openingBalance: moneyNumber.optional(),
+});
+
+const ClientEditBody = z.object({
+  oldName: z.string().trim().min(1),
+  newName: z.string().trim().min(2, "اسم العميل يجب أن يتكون من حرفين على الأقل"),
+  phone: z.string().trim().nullish(),
+  notes: z.string().trim().nullish(),
+  openingBalance: moneyNumber.optional(),
+});
+
+const LedgerEditBody = z.object({
+  type: z.enum(["income", "expense"]),
+  amount: positiveMoney,
+  description: z.string().trim().min(1, "البيان مطلوب"),
+  entryDate: z.string().optional(),
+});
+
+function parseDate(value: string | undefined, label: string): Date {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) throw new Error(`${label} غير صحيح`);
+  const day = value?.slice(0, 10);
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(day) && date.toISOString().slice(0, 10) !== day) {
+    throw new Error(`${label} غير صحيح`);
+  }
+  return date;
+}
+
+async function lockNames(tx: any, scope: string, officeId: number, ...names: string[]): Promise<void> {
+  const keys = [...new Set(names.map((name) => `${scope}:${officeId}:${name.trim()}`))].sort();
+  for (const key of keys) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+  }
+}
 
 // Agent names open to all office users (for form pickers)
 router.get("/statement/agent-names", requireOffice, async (req, res): Promise<void> => {
@@ -88,38 +134,71 @@ router.get("/statement/agents", async (req, res): Promise<void> => {
 });
 
 router.post("/statement/agents", async (req, res): Promise<void> => {
-  const parsed = CreateAgentBody.safeParse(req.body);
+  const parsed = AgentEditBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
-  const [row] = await db.insert(agentsTable).values({ ...parsed.data, userId: officeId }).returning();
-  res.status(201).json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, totalPurchases: 0, transferred: 0, paidFrom: 0, paidTo: 0, balance: 0, txCount: 0, createdAt: row.createdAt.toISOString() });
+  const row = await db.transaction(async (tx) => {
+    await lockNames(tx, "agent", officeId, parsed.data.name);
+    const duplicate = await tx.select({ id: agentsTable.id }).from(agentsTable)
+      .where(and(eq(agentsTable.userId, officeId), sql`btrim(${agentsTable.name}) = btrim(${parsed.data.name})`));
+    if (duplicate.length) return null;
+    return (await tx.insert(agentsTable).values({
+      userId: officeId,
+      name: parsed.data.name,
+      phone: parsed.data.phone ?? null,
+      notes: parsed.data.notes ?? null,
+      openingBalance: String(parsed.data.openingBalance ?? 0),
+    }).returning())[0];
+  });
+  if (!row) { res.status(409).json({ error: "يوجد وكيل بهذا الاسم مسبقاً" }); return; }
+  res.status(201).json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, openingBalance: Number(row.openingBalance) || 0, totalPurchases: 0, transferred: 0, paidFrom: 0, paidTo: 0, balance: Number(row.openingBalance) || 0, txCount: 0, createdAt: row.createdAt.toISOString() });
 });
 
 router.put("/statement/agents/:id", async (req, res): Promise<void> => {
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
-  const parsed = UpdateAgentBody.safeParse(req.body);
+  const parsed = AgentEditBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
 
-  const [existing] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-
-  const oldName = existing.name;
   const newName = parsed.data.name;
 
-  const [row] = await db.update(agentsTable).set(parsed.data).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId))).returning();
+  const row = await db.transaction(async (tx) => {
+    await lockNames(tx, "agent-id", officeId, String(params.data.id));
+    const [existing] = await tx.select().from(agentsTable).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId)));
+    if (!existing) return { kind: "not-found" as const, row: null };
+    const oldName = existing.name;
+    await lockNames(tx, "agent", officeId, oldName, newName);
+    const duplicate = await tx.select({ id: agentsTable.id }).from(agentsTable)
+      .where(and(
+        eq(agentsTable.userId, officeId),
+        ne(agentsTable.id, params.data.id),
+        sql`btrim(${agentsTable.name}) = btrim(${newName})`,
+      ));
+    if (duplicate.length) return { kind: "conflict" as const, row: null };
+    const [updated] = await tx.update(agentsTable).set({
+      name: newName,
+      phone: parsed.data.phone ?? null,
+      notes: parsed.data.notes ?? null,
+      ...(parsed.data.openingBalance === undefined ? {} : { openingBalance: String(parsed.data.openingBalance) }),
+    }).where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, officeId))).returning();
+    if (!updated) return { kind: "not-found" as const, row: null };
 
-  // Re-tag transactions if name changed
-  if (newName && newName !== oldName) {
-    await db.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${oldName})`));
-    await db.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${oldName})`));
-    // Standalone agent vouchers link by name too — keep them attached after rename.
-    await db.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`));
-  }
+    // Transactions and standalone vouchers link agents by name, so a rename
+    // must retag every linked row in the same transaction.
+    if (newName !== oldName) {
+      await tx.update(umrahClientsTable).set({ agent: newName }).where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.agent}) = btrim(${oldName})`));
+      await tx.update(otherVisasTable).set({ agent: newName }).where(and(eq(otherVisasTable.userId, officeId), sql`btrim(${otherVisasTable.agent}) = btrim(${oldName})`));
+      await tx.update(vouchersTable).set({ partyName: newName }).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "agent"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`));
+    }
+    return { kind: "ok" as const, row: updated };
+  });
+  if (row.kind === "conflict") { res.status(409).json({ error: "يوجد وكيل بهذا الاسم مسبقاً" }); return; }
+  if (row.kind === "not-found" || !row.row) { res.status(404).json({ error: "Not found" }); return; }
 
-  const bal = await computeAgentBalance(officeId, row.id, row.name, Number(row.openingBalance) || 0);
-  res.json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, openingBalance: Number(row.openingBalance) || 0, ...bal, createdAt: row.createdAt.toISOString() });
+  const agent = row.row;
+  const bal = await computeAgentBalance(officeId, agent.id, agent.name, Number(agent.openingBalance) || 0);
+  res.json({ id: agent.id, name: agent.name, phone: agent.phone, notes: agent.notes, openingBalance: Number(agent.openingBalance) || 0, ...bal, createdAt: agent.createdAt.toISOString() });
 });
 
 router.delete("/statement/agents/:id", async (req, res): Promise<void> => {
@@ -259,7 +338,13 @@ router.get("/statement/agents/:id/details", async (req, res): Promise<void> => {
   ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const payments = await db.select().from(agentPaymentsTable).where(and(eq(agentPaymentsTable.userId, officeId), eq(agentPaymentsTable.agentId, agent.id))).orderBy(agentPaymentsTable.paidAt);
-  const vouchers = await db.select().from(vouchersTable).where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyName, agent.name))).orderBy(vouchersTable.voucherDate);
+  const vouchers = await db.select().from(vouchersTable)
+    .where(and(
+      eq(vouchersTable.userId, officeId),
+      eq(vouchersTable.partyType, "agent"),
+      sql`btrim(${vouchersTable.partyName}) = btrim(${agent.name})`,
+    ))
+    .orderBy(vouchersTable.voucherDate);
 
   res.json({
     agent: { id: agent.id, name: agent.name, phone: agent.phone, notes: agent.notes, ...bal, createdAt: agent.createdAt.toISOString() },
@@ -336,45 +421,74 @@ router.post("/statement/clients", async (req, res): Promise<void> => {
   res.status(201).json({ id: row.id, clientName: row.clientName, phone: row.phone, notes: row.notes });
 });
 
-// إعادة تسمية حساب عميل — تُحدِّث المعاملات والسندات المرتبطة بالاسم القديم
-router.put("/statement/clients/rename", async (req, res): Promise<void> => {
+// تعديل حساب عميل — يعمل أيضاً للعملاء المشتقين من المعاملات فقط.
+router.put("/statement/clients", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
-  const body = z.object({
-    oldName: z.string().trim().min(1),
-    newName: z.string().trim().min(1),
-  }).safeParse(req.body);
+  const body = ClientEditBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   const { oldName, newName } = body.data;
-  if (oldName === newName) { res.json({ message: "No change" }); return; }
 
-  const [conflict] = await db.select({ id: clientAccountsTable.id }).from(clientAccountsTable)
-    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, newName)));
-  if (conflict) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
+  const result = await db.transaction(async (tx) => {
+    await lockNames(tx, "client", officeId, oldName, newName);
+    const [manual] = await tx.select().from(clientAccountsTable)
+      .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${oldName})`));
+    const sameName = oldName.trim() === newName.trim();
+    if (!sameName) {
+      const [manualConflict, visaConflict, umrahConflict, voucherConflict] = await Promise.all([
+        tx.select({ id: clientAccountsTable.id }).from(clientAccountsTable)
+          .where(and(eq(clientAccountsTable.userId, officeId), sql`btrim(${clientAccountsTable.clientName}) = btrim(${newName})`)).limit(1),
+        tx.select({ id: otherVisasTable.id }).from(otherVisasTable)
+          .where(and(eq(otherVisasTable.userId, officeId), sql`btrim(coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName})) = btrim(${newName})`)).limit(1),
+        tx.select({ id: umrahClientsTable.id }).from(umrahClientsTable)
+          .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.client}) = btrim(${newName})`)).limit(1),
+        tx.select({ id: vouchersTable.id }).from(vouchersTable)
+          .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), sql`btrim(${vouchersTable.partyName}) = btrim(${newName})`)).limit(1),
+      ]);
+      if (manualConflict.length || visaConflict.length || umrahConflict.length || voucherConflict.length) {
+        return { kind: "conflict" as const, account: null };
+      }
+    }
 
-  const [manual] = await db.update(clientAccountsTable).set({ clientName: newName })
-    .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientName, oldName))).returning();
-  if (!manual) {
-    // لا صف يدوي — تأكد أن الاسم القديم موجود فعلاً في المعاملات أو السندات قبل الإنشاء
-    const [visaHit] = await db.select({ id: otherVisasTable.id }).from(otherVisasTable)
+    const visaHit = await tx.select({ id: otherVisasTable.id }).from(otherVisasTable)
       .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`)).limit(1);
-    const [umrahHit] = visaHit ? [visaHit] : await db.select({ id: umrahClientsTable.id }).from(umrahClientsTable)
-      .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.client, oldName))).limit(1);
-    const [voucherHit] = umrahHit ? [umrahHit] : await db.select({ id: vouchersTable.id }).from(vouchersTable)
-      .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), eq(vouchersTable.partyName, oldName))).limit(1);
-    if (!voucherHit) { res.status(404).json({ error: "لا يوجد حساب عميل بهذا الاسم" }); return; }
-    // حساب مُشتق من المعاملات فقط — أنشئ صفاً يدوياً بالاسم الجديد ليبقى الحساب ظاهراً
-    await db.insert(clientAccountsTable).values({ userId: officeId, clientName: newName, openingBalance: "0" });
-  }
+    const umrahHit = await tx.select({ id: umrahClientsTable.id }).from(umrahClientsTable)
+      .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.client}) = btrim(${oldName})`)).limit(1);
+    const voucherHit = await tx.select({ id: vouchersTable.id }).from(vouchersTable)
+      .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`)).limit(1);
+    if (!manual && !visaHit.length && !umrahHit.length && !voucherHit.length) {
+      return { kind: "not-found" as const, account: null };
+    }
 
-  // Re-tag transactions & vouchers so history follows the new name
-  await db.update(otherVisasTable).set({ client: newName })
-    .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`));
-  await db.update(umrahClientsTable).set({ client: newName })
-    .where(and(eq(umrahClientsTable.userId, officeId), eq(umrahClientsTable.client, oldName)));
-  await db.update(vouchersTable).set({ partyName: newName })
-    .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), eq(vouchersTable.partyName, oldName)));
+    const account = manual
+      ? (await tx.update(clientAccountsTable).set({
+          clientName: newName,
+          phone: body.data.phone ?? null,
+          notes: body.data.notes ?? null,
+          ...(body.data.openingBalance === undefined ? {} : { openingBalance: String(body.data.openingBalance) }),
+        }).where(and(eq(clientAccountsTable.id, manual.id), eq(clientAccountsTable.userId, officeId))).returning())[0]
+      : (await tx.insert(clientAccountsTable).values({
+          userId: officeId,
+          clientName: newName,
+          phone: body.data.phone ?? null,
+          notes: body.data.notes ?? null,
+          openingBalance: String(body.data.openingBalance ?? 0),
+        }).returning())[0];
 
-  res.json({ message: "Renamed" });
+    if (newName !== oldName) {
+      await tx.update(otherVisasTable).set({ client: newName })
+        .where(and(eq(otherVisasTable.userId, officeId), sql`coalesce(nullif(${otherVisasTable.client},''), ${otherVisasTable.clientName}) = ${oldName}`));
+      await tx.update(umrahClientsTable).set({ client: newName })
+        .where(and(eq(umrahClientsTable.userId, officeId), sql`btrim(${umrahClientsTable.client}) = btrim(${oldName})`));
+      await tx.update(vouchersTable).set({ partyName: newName })
+        .where(and(eq(vouchersTable.userId, officeId), eq(vouchersTable.partyType, "client"), sql`btrim(${vouchersTable.partyName}) = btrim(${oldName})`));
+    }
+    return { kind: "ok" as const, account };
+  });
+  if (result.kind === "conflict") { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
+  if (result.kind === "not-found" || !result.account) { res.status(404).json({ error: "لا يوجد حساب عميل بهذا الاسم" }); return; }
+
+  const account = result.account;
+  res.json({ id: account.id, clientName: account.clientName, phone: account.phone, notes: account.notes, openingBalance: Number(account.openingBalance) || 0 });
 });
 
 router.delete("/statement/clients/:id", async (req, res): Promise<void> => {
@@ -446,7 +560,7 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
       prev.balance += r.balance; prev.txCount += r.txCount;
       prev.phone = prev.phone || r.phone;
     } else {
-      byName.set(key, { clientName: r.clientName, phone: r.phone, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
+      byName.set(key, { clientName: r.clientName, phone: r.phone, notes: null, totalSales: r.totalSales, totalReceived: r.totalReceived, balance: r.balance, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
     }
   }
   for (const r of umrahRows) {
@@ -456,14 +570,21 @@ router.get("/statement/clients", async (req, res): Promise<void> => {
       prev.totalSales += r.totalSales; prev.balance += r.totalSales; prev.txCount += r.txCount;
       prev.phone = prev.phone || r.phone;
     } else {
-      byName.set(key, { clientName: key, phone: r.phone, totalSales: r.totalSales, totalReceived: 0, balance: r.totalSales, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
+      byName.set(key, { clientName: key, phone: r.phone, notes: null, totalSales: r.totalSales, totalReceived: 0, balance: r.totalSales, txCount: r.txCount, voucherReceipts: 0, voucherPayments: 0, manualId: null, openingBalance: 0 });
     }
   }
   for (const m of manualRows) {
     const opening = Number(m.openingBalance) || 0;
     const prev = byName.get(m.clientName);
-    if (prev) { prev.manualId = m.id; prev.phone = prev.phone || m.phone; prev.openingBalance = opening; prev.balance += opening; }
-    else byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, totalSales: 0, totalReceived: 0, balance: opening, txCount: 0, voucherReceipts: 0, voucherPayments: 0, manualId: m.id, openingBalance: opening });
+    if (prev) {
+      prev.manualId = m.id;
+      prev.phone = m.phone || prev.phone;
+      prev.notes = m.notes;
+      prev.openingBalance = opening;
+      prev.balance += opening;
+    } else {
+      byName.set(m.clientName, { clientName: m.clientName, phone: m.phone, notes: m.notes, totalSales: 0, totalReceived: 0, balance: opening, txCount: 0, voucherReceipts: 0, voucherPayments: 0, manualId: m.id, openingBalance: opening });
+    }
   }
   // Fold vouchers into balances only for known client accounts (transaction
   // clients or manual accounts) — vouchers for arbitrary "other" parties
@@ -594,7 +715,8 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
   const umrahSales = umrahRows.reduce((s, r) => s + (Number(r.salePrice) || 0), 0);
   res.json({
     account: {
-      clientName: name, phone: totals.phone, openingBalance,
+      clientName: name, phone: account?.phone ?? totals.phone, notes: account?.notes ?? null,
+      manualId: account?.id ?? null, openingBalance,
       totalSales: totals.totalSales + umrahSales, totalReceived: totals.totalReceived,
       voucherReceipts, voucherPayments,
       balance: openingBalance + totals.balance + umrahSales + voucherPayments - voucherReceipts,
@@ -618,12 +740,38 @@ router.get("/statement/ledger", async (req, res): Promise<void> => {
 });
 
 router.post("/statement/ledger", async (req, res): Promise<void> => {
-  const parsed = CreateLedgerEntryBody.safeParse(req.body);
+  const parsed = LedgerEditBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
-  const { entryDate, ...rest } = parsed.data as any;
-  const [row] = await db.insert(ledgerEntriesTable).values({ ...rest, userId: officeId, entryDate: entryDate ? new Date(entryDate) : new Date() }).returning();
+  let entryDate: Date;
+  try { entryDate = parseDate(parsed.data.entryDate, "تاريخ القيد"); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const [row] = await db.insert(ledgerEntriesTable).values({
+    userId: officeId,
+    type: parsed.data.type,
+    amount: String(parsed.data.amount),
+    description: parsed.data.description,
+    entryDate,
+  }).returning();
   res.status(201).json({ id: row.id, type: row.type, amount: Number(row.amount), description: row.description, entryDate: row.entryDate.toISOString(), createdAt: row.createdAt.toISOString() });
+});
+
+router.put("/statement/ledger/:id", async (req, res): Promise<void> => {
+  const params = DeleteLedgerEntryParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = LedgerEditBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  let entryDate: Date;
+  try { entryDate = parseDate(parsed.data.entryDate, "تاريخ القيد"); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  const [row] = await db.update(ledgerEntriesTable).set({
+    type: parsed.data.type,
+    amount: String(parsed.data.amount),
+    description: parsed.data.description,
+    entryDate,
+  }).where(and(eq(ledgerEntriesTable.id, params.data.id), eq(ledgerEntriesTable.userId, req.session.officeId!))).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ id: row.id, type: row.type, amount: Number(row.amount), description: row.description, entryDate: row.entryDate.toISOString(), createdAt: row.createdAt.toISOString() });
 });
 
 router.delete("/statement/ledger/:id", async (req, res): Promise<void> => {

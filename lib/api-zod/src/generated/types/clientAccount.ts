@@ -10,6 +10,11 @@ export interface ClientAccount {
   clientName: string;
   /** @nullable */
   phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  openingBalance?: number;
+  /** @nullable */
+  manualId?: number | null;
   totalSales: number;
   totalReceived: number;
   balance: number;

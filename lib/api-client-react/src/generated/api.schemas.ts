@@ -95,6 +95,7 @@ export interface AgentInput {
   name: string;
   phone?: string;
   notes?: string;
+  openingBalance?: number;
 }
 
 export interface AgentPayment {
@@ -162,10 +163,23 @@ export interface ClientAccount {
   clientName: string;
   /** @nullable */
   phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  openingBalance?: number;
+  /** @nullable */
+  manualId?: number | null;
   totalSales: number;
   totalReceived: number;
   balance: number;
   txCount: number;
+}
+
+export interface ClientAccountUpdate {
+  oldName: string;
+  newName: string;
+  phone?: string;
+  notes?: string;
+  openingBalance?: number;
 }
 
 export interface ClientDetails {

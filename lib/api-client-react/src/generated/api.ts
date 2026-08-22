@@ -34,6 +34,7 @@ import type {
   ArchiveRecord,
   AuthUser,
   ClientAccount,
+  ClientAccountUpdate,
   ClientDetails,
   DashboardStats,
   ErrorResponse,
@@ -1474,6 +1475,76 @@ export function useListClientAccounts<TData = Awaited<ReturnType<typeof listClie
 
 
 
+export const getUpdateClientAccountUrl = () => {
+
+
+
+
+  return `/api/statement/clients`
+}
+
+/**
+ * @summary Update a client account or transaction-derived client
+ */
+export const updateClientAccount = async (clientAccountUpdate: ClientAccountUpdate, options?: RequestInit): Promise<ClientAccount> => {
+
+  return customFetch<ClientAccount>(getUpdateClientAccountUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientAccountUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateClientAccountMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientAccount>>, TError,{data: BodyType<ClientAccountUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateClientAccount>>, TError,{data: BodyType<ClientAccountUpdate>}, TContext> => {
+
+const mutationKey = ['updateClientAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateClientAccount>>, {data: BodyType<ClientAccountUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateClientAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateClientAccountMutationResult = NonNullable<Awaited<ReturnType<typeof updateClientAccount>>>
+    export type UpdateClientAccountMutationBody = BodyType<ClientAccountUpdate>
+    export type UpdateClientAccountMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update a client account or transaction-derived client
+ */
+export const useUpdateClientAccount = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientAccount>>, TError,{data: BodyType<ClientAccountUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateClientAccount>>,
+        TError,
+        {data: BodyType<ClientAccountUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateClientAccountMutationOptions(options));
+    }
+
 export const getGetClientDetailsUrl = (params: GetClientDetailsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1703,6 +1774,77 @@ export const useCreateLedgerEntry = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateLedgerEntryMutationOptions(options));
+    }
+
+export const getUpdateLedgerEntryUrl = (id: number,) => {
+
+
+
+
+  return `/api/statement/ledger/${id}`
+}
+
+/**
+ * @summary Update a ledger entry
+ */
+export const updateLedgerEntry = async (id: number,
+    ledgerEntryInput: LedgerEntryInput, options?: RequestInit): Promise<LedgerEntry> => {
+
+  return customFetch<LedgerEntry>(getUpdateLedgerEntryUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(ledgerEntryInput)
+  }
+);}
+
+
+
+
+export const getUpdateLedgerEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLedgerEntry>>, TError,{id: number;data: BodyType<LedgerEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLedgerEntry>>, TError,{id: number;data: BodyType<LedgerEntryInput>}, TContext> => {
+
+const mutationKey = ['updateLedgerEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLedgerEntry>>, {id: number;data: BodyType<LedgerEntryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateLedgerEntry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLedgerEntryMutationResult = NonNullable<Awaited<ReturnType<typeof updateLedgerEntry>>>
+    export type UpdateLedgerEntryMutationBody = BodyType<LedgerEntryInput>
+    export type UpdateLedgerEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a ledger entry
+ */
+export const useUpdateLedgerEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLedgerEntry>>, TError,{id: number;data: BodyType<LedgerEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLedgerEntry>>,
+        TError,
+        {id: number;data: BodyType<LedgerEntryInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateLedgerEntryMutationOptions(options));
     }
 
 export const getDeleteLedgerEntryUrl = (id: number,) => {
@@ -2039,7 +2181,7 @@ export const getGetVoucherQueryKey = (id: number,) => {
     }
 
 
-export const getGetVoucherQueryOptions = <TData = Awaited<ReturnType<typeof getVoucher>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVoucher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetVoucherQueryOptions = <TData = Awaited<ReturnType<typeof getVoucher>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVoucher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -2058,14 +2200,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetVoucherQueryResult = NonNullable<Awaited<ReturnType<typeof getVoucher>>>
-export type GetVoucherQueryError = ErrorType<ErrorResponse>
+export type GetVoucherQueryError = ErrorType<unknown>
 
 
 /**
  * @summary Get a voucher
  */
 
-export function useGetVoucher<TData = Awaited<ReturnType<typeof getVoucher>>, TError = ErrorType<ErrorResponse>>(
+export function useGetVoucher<TData = Awaited<ReturnType<typeof getVoucher>>, TError = ErrorType<unknown>>(
  id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVoucher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
@@ -2082,6 +2224,77 @@ export function useGetVoucher<TData = Awaited<ReturnType<typeof getVoucher>>, TE
 
 
 
+
+export const getUpdateVoucherUrl = (id: number,) => {
+
+
+
+
+  return `/api/vouchers/${id}`
+}
+
+/**
+ * @summary Update a voucher and its linked agent payment when applicable
+ */
+export const updateVoucher = async (id: number,
+    voucherInput: VoucherInput, options?: RequestInit): Promise<Voucher> => {
+
+  return customFetch<Voucher>(getUpdateVoucherUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(voucherInput)
+  }
+);}
+
+
+
+
+export const getUpdateVoucherMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVoucher>>, TError,{id: number;data: BodyType<VoucherInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateVoucher>>, TError,{id: number;data: BodyType<VoucherInput>}, TContext> => {
+
+const mutationKey = ['updateVoucher'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateVoucher>>, {id: number;data: BodyType<VoucherInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateVoucher(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateVoucherMutationResult = NonNullable<Awaited<ReturnType<typeof updateVoucher>>>
+    export type UpdateVoucherMutationBody = BodyType<VoucherInput>
+    export type UpdateVoucherMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update a voucher and its linked agent payment when applicable
+ */
+export const useUpdateVoucher = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVoucher>>, TError,{id: number;data: BodyType<VoucherInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateVoucher>>,
+        TError,
+        {id: number;data: BodyType<VoucherInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateVoucherMutationOptions(options));
+    }
 
 export const getDeleteVoucherUrl = (id: number,) => {
 

@@ -22,6 +22,7 @@ export * from './agentStats';
 export * from './archiveRecord';
 export * from './authUser';
 export * from './clientAccount';
+export * from './clientAccountUpdate';
 export * from './clientDetails';
 export * from './dashboardStats';
 export * from './errorResponse';

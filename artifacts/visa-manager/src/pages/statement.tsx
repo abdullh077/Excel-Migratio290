@@ -107,6 +107,13 @@ const deleteAgent = (id: any) =>
     method: "DELETE",
     credentials: "include",
   }).then(handle);
+const updateClient = (body: any) =>
+  fetch("/api/statement/clients", {
+    method: "PUT",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const getAgent = (id: any, from?: string, to?: string) => {
   const qs = new URLSearchParams();
   if (from) qs.set("from", from);
@@ -142,6 +149,13 @@ const deleteLedger = (id: any) =>
     method: "DELETE",
     credentials: "include",
   }).then(handle);
+const updateLedger = (id: any, body: any) =>
+  fetch(`/api/statement/ledger/${id}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  }).then(handle);
 const getSummary = () =>
   fetch("/api/statement/summary", { credentials: "include" }).then(handle);
 const listClients = () =>
@@ -167,6 +181,13 @@ const deleteVoucher = (id: any) =>
   fetch(`/api/vouchers/${id}`, {
     method: "DELETE",
     credentials: "include",
+  }).then(handle);
+const updateVoucher = (id: any, body: any) =>
+  fetch(`/api/vouchers/${id}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
   }).then(handle);
 const getOffice = () =>
   fetch("/api/settings/office", { credentials: "include" }).then(handle);
@@ -511,9 +532,15 @@ export default function StatementPage() {
   const [agentDialog, setAgentDialog] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [nameField, setNameField] = useState("");
+  const [agentPhoneField, setAgentPhoneField] = useState("");
+  const [agentNotesField, setAgentNotesField] = useState("");
+  const [agentOpeningField, setAgentOpeningField] = useState("");
   // client account edit/delete
   const [clientEditTarget, setClientEditTarget] = useState<any>(null);
   const [clientNewName, setClientNewName] = useState("");
+  const [clientPhoneField, setClientPhoneField] = useState("");
+  const [clientNotesField, setClientNotesField] = useState("");
+  const [clientOpeningField, setClientOpeningField] = useState("");
   const [clientDeleteTarget, setClientDeleteTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
@@ -523,6 +550,8 @@ export default function StatementPage() {
   const [ledgerType, setLedgerType] = useState("expense");
   const [ledgerAmount, setLedgerAmount] = useState("");
   const [ledgerDesc, setLedgerDesc] = useState("");
+  const [ledgerDate, setLedgerDate] = useState(todayISO());
+  const [ledgerEditTarget, setLedgerEditTarget] = useState<any>(null);
 
   // clients tab
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
@@ -538,6 +567,7 @@ export default function StatementPage() {
   const [vAmount, setVAmount] = useState("");
   const [vDesc, setVDesc] = useState("");
   const [vDate, setVDate] = useState(todayISO());
+  const [voucherEditTarget, setVoucherEditTarget] = useState<any>(null);
   // ربط السند بوكيل أو عميل — القيمة بصيغة "agent|الاسم" أو "client|الاسم"
   const [vLink, setVLink] = useState<string>("");
   const [printVoucher, setPrintVoucher] = useState<any>(null);
@@ -628,8 +658,12 @@ export default function StatementPage() {
     qc.invalidateQueries({ queryKey: AGENTS_KEY });
     qc.invalidateQueries({ queryKey: LEDGER_KEY });
     qc.invalidateQueries({ queryKey: SUMMARY_KEY });
+    qc.invalidateQueries({ queryKey: CLIENTS_KEY });
+    qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
     if (selected != null)
-      qc.invalidateQueries({ queryKey: ["statement-agent", selected] });
+      qc.invalidateQueries({ queryKey: ["statement-agent"] });
+    if (selectedClient != null)
+      qc.invalidateQueries({ queryKey: ["statement-client"] });
   };
 
   const onError = (e: any) =>
@@ -642,13 +676,26 @@ export default function StatementPage() {
   const saveAgent = useMutation({
     mutationFn: () =>
       editing
-        ? updateAgent(editing.id, { name: nameField.trim() })
-        : createAgent({ name: nameField.trim() }),
+        ? updateAgent(editing.id, {
+            name: nameField.trim(),
+            phone: agentPhoneField.trim() || undefined,
+            notes: agentNotesField.trim() || undefined,
+            openingBalance: Number(agentOpeningField || 0),
+          })
+        : createAgent({
+            name: nameField.trim(),
+            phone: agentPhoneField.trim() || undefined,
+            notes: agentNotesField.trim() || undefined,
+            openingBalance: Number(agentOpeningField || 0),
+          }),
     onSuccess: () => {
       invalidateAll();
       setAgentDialog(false);
       setEditing(null);
       setNameField("");
+      setAgentPhoneField("");
+      setAgentNotesField("");
+      setAgentOpeningField("");
       toast({ title: editing ? "تم تعديل الوكيل" : "تم إضافة الوكيل" });
     },
     onError,
@@ -669,21 +716,25 @@ export default function StatementPage() {
 
   const renameClient = useMutation({
     mutationFn: () =>
-      fetch("/api/statement/clients/rename", {
-        method: "PUT",
-        credentials: "include",
-        headers: jsonHeaders,
-        body: JSON.stringify({
-          oldName: clientEditTarget?.clientName,
-          newName: clientNewName.trim(),
-        }),
-      }).then(handle),
-    onSuccess: () => {
+      updateClient({
+        oldName: clientEditTarget?.clientName,
+        newName: clientNewName.trim(),
+        phone: clientPhoneField.trim() || undefined,
+        notes: clientNotesField.trim() || undefined,
+        openingBalance: Number(clientOpeningField || 0),
+      }),
+    onSuccess: (updated: any) => {
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
       qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
       qc.invalidateQueries({ queryKey: ["statement-client"] });
+      if (selectedClient === clientEditTarget?.clientName) {
+        setSelectedClient(updated?.clientName ?? clientNewName.trim());
+      }
       setClientEditTarget(null);
       setClientNewName("");
+      setClientPhoneField("");
+      setClientNotesField("");
+      setClientOpeningField("");
       toast({ title: "تم تعديل اسم العميل" });
     },
     onError,
@@ -737,12 +788,33 @@ export default function StatementPage() {
         type: ledgerType,
         amount: Number(ledgerAmount),
         description: ledgerDesc.trim(),
+        entryDate: ledgerDate ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString() : undefined,
       }),
     onSuccess: () => {
       invalidateAll();
       setLedgerAmount("");
       setLedgerDesc("");
+      setLedgerDate(todayISO());
       toast({ title: "تم تسجيل القيد" });
+    },
+    onError,
+  });
+
+  const saveLedger = useMutation({
+    mutationFn: () =>
+      updateLedger(ledgerEditTarget.id, {
+        type: ledgerType,
+        amount: Number(ledgerAmount),
+        description: ledgerDesc.trim(),
+        entryDate: ledgerDate ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString() : undefined,
+      }),
+    onSuccess: () => {
+      invalidateAll();
+      setLedgerEditTarget(null);
+      setLedgerAmount("");
+      setLedgerDesc("");
+      setLedgerDate(todayISO());
+      toast({ title: "تم تعديل القيد" });
     },
     onError,
   });
@@ -759,30 +831,33 @@ export default function StatementPage() {
   const addVoucher = useMutation({
     mutationFn: () => {
       const [linkType, linkName] = vLink.split("|");
-      return createVoucher({
+      const body = {
         kind: voucherKind,
         partyType: linkType as "agent" | "client",
         partyName: linkName,
         amount: Number(vAmount),
         description: vDesc.trim() || undefined,
         voucherDate: vDate ? new Date(vDate).toISOString() : undefined,
-      });
+      };
+      return voucherEditTarget
+        ? updateVoucher(voucherEditTarget.id, body)
+        : createVoucher(body);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
-      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
-      qc.invalidateQueries({ queryKey: AGENTS_KEY });
-      qc.invalidateQueries({ queryKey: ["statement-client"] });
+      invalidateAll();
       setVoucherDialog(false);
+      setVoucherEditTarget(null);
       setVAmount("");
       setVDesc("");
       setVDate(todayISO());
       setVLink("");
       toast({
         title:
-          voucherKind === "receipt"
-            ? "تم إنشاء سند القبض"
-            : "تم إنشاء سند الصرف",
+          voucherEditTarget
+            ? "تم تعديل السند"
+            : voucherKind === "receipt"
+              ? "تم إنشاء سند القبض"
+              : "تم إنشاء سند الصرف",
       });
     },
     onError,
@@ -791,15 +866,14 @@ export default function StatementPage() {
   const delVoucher = useMutation({
     mutationFn: (id: any) => deleteVoucher(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
-      qc.invalidateQueries({ queryKey: CLIENTS_KEY });
-      qc.invalidateQueries({ queryKey: ["statement-client"] });
+      invalidateAll();
       toast({ title: "تم حذف السند" });
     },
     onError,
   });
 
   const openVoucher = (kind: "receipt" | "payment") => {
+    setVoucherEditTarget(null);
     setVoucherKind(kind);
     setVAmount("");
     setVDesc("");
@@ -808,10 +882,31 @@ export default function StatementPage() {
     setVoucherDialog(true);
   };
 
+  const openVoucherEdit = (voucher: any) => {
+    setVoucherEditTarget(voucher);
+    setVoucherKind(voucher.kind);
+    setVAmount(String(voucher.amount ?? ""));
+    setVDesc(voucher.description ?? "");
+    setVDate(voucher.voucherDate ? new Date(voucher.voucherDate).toISOString().slice(0, 10) : todayISO());
+    setVLink(`${voucher.partyType}|${voucher.partyName}`);
+    setVoucherDialog(true);
+  };
+
   const openEdit = (a: any) => {
     setEditing(a);
     setNameField(a.name);
+    setAgentPhoneField(a.phone ?? "");
+    setAgentNotesField(a.notes ?? "");
+    setAgentOpeningField(String(a.openingBalance ?? 0));
     setAgentDialog(true);
+  };
+
+  const openLedgerEdit = (entry: any) => {
+    setLedgerEditTarget(entry);
+    setLedgerType(entry.type);
+    setLedgerAmount(String(entry.amount ?? ""));
+    setLedgerDesc(entry.description ?? "");
+    setLedgerDate(entry.entryDate ? new Date(entry.entryDate).toISOString().slice(0, 10) : todayISO());
   };
 
   return (
@@ -1037,6 +1132,9 @@ export default function StatementPage() {
                                   e.stopPropagation();
                                   setClientEditTarget(c);
                                   setClientNewName(c.clientName);
+                                  setClientPhoneField(c.phone ?? "");
+                                  setClientNotesField(c.notes ?? "");
+                                  setClientOpeningField(String(c.openingBalance ?? 0));
                                 }}
                               >
                                 <Pencil className="w-4 h-4" />
@@ -1160,6 +1258,14 @@ export default function StatementPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => openVoucherEdit(v)}
+                              aria-label="تعديل"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="text-destructive"
                               onClick={() => delVoucher.mutate(v.id)}
                               aria-label="حذف"
@@ -1217,6 +1323,15 @@ export default function StatementPage() {
                   placeholder="0"
                 />
               </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">التاريخ</p>
+                <Input
+                  type="date"
+                  className="w-40"
+                  value={ledgerDate}
+                  onChange={(e) => setLedgerDate(e.target.value)}
+                />
+              </div>
               <div className="flex-1 min-w-48">
                 <p className="text-sm mb-1.5 font-medium">الوصف</p>
                 <Input
@@ -1229,12 +1344,33 @@ export default function StatementPage() {
                 disabled={
                   !Number(ledgerAmount) ||
                   !ledgerDesc.trim() ||
-                  addLedger.isPending
+                  (ledgerEditTarget ? saveLedger.isPending : addLedger.isPending)
                 }
-                onClick={() => addLedger.mutate()}
+                onClick={() =>
+                  ledgerEditTarget ? saveLedger.mutate() : addLedger.mutate()
+                }
               >
-                <Plus className="w-4 h-4 ml-1.5" /> تسجيل
+                {ledgerEditTarget ? (
+                  <Pencil className="w-4 h-4 ml-1.5" />
+                ) : (
+                  <Plus className="w-4 h-4 ml-1.5" />
+                )}
+                {ledgerEditTarget ? "حفظ التعديل" : "تسجيل"}
               </Button>
+              {ledgerEditTarget && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setLedgerEditTarget(null);
+                    setLedgerType("expense");
+                    setLedgerAmount("");
+                    setLedgerDesc("");
+                    setLedgerDate(todayISO());
+                  }}
+                >
+                  إلغاء التعديل
+                </Button>
+              )}
             </div>
             <div className="rounded-lg border border-border overflow-x-auto">
               <Table>
@@ -1277,6 +1413,14 @@ export default function StatementPage() {
                           {nt(Number(ie.amount))}
                         </TableCell>
                         <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openLedgerEdit(ie)}
+                            aria-label="تعديل"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1540,6 +1684,34 @@ export default function StatementPage() {
                   placeholder="مثال: وكيل صنعاء"
                 />
               </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">رقم التواصل</p>
+                <Input
+                  value={agentPhoneField}
+                  onChange={(e) => setAgentPhoneField(e.target.value)}
+                  placeholder="اختياري"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">ملاحظات</p>
+                <Input
+                  value={agentNotesField}
+                  onChange={(e) => setAgentNotesField(e.target.value)}
+                  placeholder="اختياري"
+                />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">الرصيد الافتتاحي</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={agentOpeningField}
+                  onChange={(e) => setAgentOpeningField(e.target.value)}
+                  placeholder="0"
+                  dir="ltr"
+                />
+              </div>
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setAgentDialog(false)}>
@@ -1601,7 +1773,8 @@ export default function StatementPage() {
                 تعديل العميل — {clientEditTarget?.clientName}
               </DialogTitle>
             </DialogHeader>
-            <div>
+            <div className="space-y-3">
+              <div>
               <p className="text-sm mb-1.5 font-medium">اسم العميل</p>
               <Input
                 value={clientNewName}
@@ -1611,6 +1784,35 @@ export default function StatementPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.
               </p>
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">رقم التواصل</p>
+                <Input
+                  value={clientPhoneField}
+                  onChange={(e) => setClientPhoneField(e.target.value)}
+                  placeholder="اختياري"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">ملاحظات</p>
+                <Input
+                  value={clientNotesField}
+                  onChange={(e) => setClientNotesField(e.target.value)}
+                  placeholder="اختياري"
+                />
+              </div>
+              <div>
+                <p className="text-sm mb-1.5 font-medium">الرصيد الافتتاحي</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={clientOpeningField}
+                  onChange={(e) => setClientOpeningField(e.target.value)}
+                  placeholder="0"
+                  dir="ltr"
+                />
+              </div>
             </div>
             <DialogFooter className="gap-2">
               <Button
@@ -2391,7 +2593,7 @@ export default function StatementPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Create voucher dialog */}
+        {/* Create/edit voucher dialog */}
         <Dialog
           open={voucherDialog}
           onOpenChange={(o) => {
@@ -2412,6 +2614,7 @@ export default function StatementPage() {
                     صرف
                   </>
                 )}
+                {voucherEditTarget && " — تعديل"}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
@@ -2435,19 +2638,32 @@ export default function StatementPage() {
                         وكيل — {a.name}
                       </SelectItem>
                     ))}
-                    {((clients as any[] | undefined) ?? []).map((c) => (
+                    {!voucherEditTarget?.agentPaymentId &&
+                      ((clients as any[] | undefined) ?? []).map((c) => (
+                        <SelectItem
+                          key={`client-${c.clientName}`}
+                          value={`client|${c.clientName}`}
+                        >
+                          عميل — {c.clientName}
+                        </SelectItem>
+                      ))}
+                    {voucherEditTarget?.partyType === "other" && (
                       <SelectItem
-                        key={`client-${c.clientName}`}
-                        value={`client|${c.clientName}`}
+                        value={`other|${voucherEditTarget.partyName}`}
                       >
-                        عميل — {c.clientName}
+                        طرف آخر — {voucherEditTarget.partyName}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
                   سيظهر السند تلقائياً في كشف حساب الوكيل أو العميل المرتبط
                 </p>
+                {voucherEditTarget?.agentPaymentId && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    هذا السند مرتبط بدفعة وكيل؛ سيُحدَّث سجل الدفعة معه.
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">المبلغ</p>

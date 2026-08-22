@@ -397,6 +397,29 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClientAccount"
+    put:
+      operationId: updateClientAccount
+      tags: [statement]
+      summary: Update a client account or transaction-derived client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientAccountUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientAccount"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /statement/clients/details:
     get:
@@ -450,6 +473,29 @@ paths:
                 $ref: "#/components/schemas/LedgerEntry"
 
   /statement/ledger/{id}:
+    put:
+      operationId: updateLedgerEntry
+      tags: [statement]
+      summary: Update a ledger entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerEntryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
     delete:
       operationId: deleteLedgerEntry
       tags: [statement]
@@ -538,6 +584,29 @@ paths:
       responses:
         "200":
           description: Voucher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voucher"
+    put:
+      operationId: updateVoucher
+      tags: [vouchers]
+      summary: Update a voucher and its linked agent payment when applicable
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoucherInput"
+      responses:
+        "200":
+          description: Updated
           content:
             application/json:
               schema:
@@ -1068,6 +1137,8 @@ components:
           type: string
         notes:
           type: string
+        openingBalance:
+          type: number
 
     AgentPayment:
       type: object
@@ -1152,6 +1223,12 @@ components:
           type: string
         phone:
           type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        openingBalance:
+          type: number
+        manualId:
+          type: ["integer", "null"]
         totalSales:
           type: number
         totalReceived:
@@ -1160,6 +1237,21 @@ components:
           type: number
         txCount:
           type: integer
+
+    ClientAccountUpdate:
+      type: object
+      required: [oldName, newName]
+      properties:
+        oldName:
+          type: string
+        newName:
+          type: string
+        phone:
+          type: string
+        notes:
+          type: string
+        openingBalance:
+          type: number
 
     ClientDetails:
       type: object

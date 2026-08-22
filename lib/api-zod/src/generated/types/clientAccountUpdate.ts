@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AgentInput {
-  name: string;
+export interface ClientAccountUpdate {
+  oldName: string;
+  newName: string;
   phone?: string;
   notes?: string;
   openingBalance?: number;

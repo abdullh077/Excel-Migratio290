@@ -189,7 +189,8 @@ export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
 export const CreateAgentBody = zod.object({
   "name": zod.string(),
   "phone": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "openingBalance": zod.number().optional()
 })
 
 export const CreateAgentResponse = zod.object({
@@ -218,7 +219,8 @@ export const UpdateAgentParams = zod.object({
 export const UpdateAgentBody = zod.object({
   "name": zod.string(),
   "phone": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "openingBalance": zod.number().optional()
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -349,12 +351,39 @@ export const DeleteAgentPaymentResponse = zod.object({
 export const ListClientAccountsResponseItem = zod.object({
   "clientName": zod.string(),
   "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "openingBalance": zod.number().optional(),
+  "manualId": zod.number().nullish(),
   "totalSales": zod.number(),
   "totalReceived": zod.number(),
   "balance": zod.number(),
   "txCount": zod.number()
 })
 export const ListClientAccountsResponse = zod.array(ListClientAccountsResponseItem)
+
+
+/**
+ * @summary Update a client account or transaction-derived client
+ */
+export const UpdateClientAccountBody = zod.object({
+  "oldName": zod.string(),
+  "newName": zod.string(),
+  "phone": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "openingBalance": zod.number().optional()
+})
+
+export const UpdateClientAccountResponse = zod.object({
+  "clientName": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "openingBalance": zod.number().optional(),
+  "manualId": zod.number().nullish(),
+  "totalSales": zod.number(),
+  "totalReceived": zod.number(),
+  "balance": zod.number(),
+  "txCount": zod.number()
+})
 
 
 /**
@@ -368,6 +397,9 @@ export const GetClientDetailsResponse = zod.object({
   "account": zod.object({
   "clientName": zod.string(),
   "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "openingBalance": zod.number().optional(),
+  "manualId": zod.number().nullish(),
   "totalSales": zod.number(),
   "totalReceived": zod.number(),
   "balance": zod.number(),
@@ -421,6 +453,30 @@ export const CreateLedgerEntryBody = zod.object({
 })
 
 export const CreateLedgerEntryResponse = zod.object({
+  "id": zod.number(),
+  "type": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string(),
+  "entryDate": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a ledger entry
+ */
+export const UpdateLedgerEntryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateLedgerEntryBody = zod.object({
+  "type": zod.enum(['income', 'expense']),
+  "amount": zod.number(),
+  "description": zod.string(),
+  "entryDate": zod.string().optional()
+})
+
+export const UpdateLedgerEntryResponse = zod.object({
   "id": zod.number(),
   "type": zod.string(),
   "amount": zod.number(),
@@ -509,6 +565,35 @@ export const GetVoucherParams = zod.object({
 })
 
 export const GetVoucherResponse = zod.object({
+  "id": zod.number(),
+  "kind": zod.string(),
+  "partyType": zod.string(),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().nullish(),
+  "voucherDate": zod.string(),
+  "agentPaymentId": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a voucher and its linked agent payment when applicable
+ */
+export const UpdateVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateVoucherBody = zod.object({
+  "kind": zod.enum(['receipt', 'payment']),
+  "partyType": zod.enum(['agent', 'client', 'other']),
+  "partyName": zod.string(),
+  "amount": zod.number(),
+  "description": zod.string().optional(),
+  "voucherDate": zod.string().optional()
+})
+
+export const UpdateVoucherResponse = zod.object({
   "id": zod.number(),
   "kind": zod.string(),
   "partyType": zod.string(),
