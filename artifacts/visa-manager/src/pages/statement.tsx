@@ -978,7 +978,7 @@ export default function StatementPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="whitespace-nowrap">
-                    <TableHead className="text-right">العمي �</TableHead>
+                    <TableHead className="text-right">العميل</TableHead>
                     <TableHead className="text-right">المعاملات</TableHead>
                     <TableHead className="text-right">إجمالي البيع</TableHead>
                     <TableHead className="text-right">المقبوض</TableHead>
