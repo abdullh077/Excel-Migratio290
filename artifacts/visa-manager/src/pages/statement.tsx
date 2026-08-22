@@ -788,7 +788,9 @@ export default function StatementPage() {
         type: ledgerType,
         amount: Number(ledgerAmount),
         description: ledgerDesc.trim(),
-        entryDate: ledgerDate ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString() : undefined,
+        entryDate: ledgerDate
+          ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString()
+          : undefined,
       }),
     onSuccess: () => {
       invalidateAll();
@@ -806,7 +808,9 @@ export default function StatementPage() {
         type: ledgerType,
         amount: Number(ledgerAmount),
         description: ledgerDesc.trim(),
-        entryDate: ledgerDate ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString() : undefined,
+        entryDate: ledgerDate
+          ? new Date(`${ledgerDate}T00:00:00.000Z`).toISOString()
+          : undefined,
       }),
     onSuccess: () => {
       invalidateAll();
@@ -852,12 +856,11 @@ export default function StatementPage() {
       setVDate(todayISO());
       setVLink("");
       toast({
-        title:
-          voucherEditTarget
-            ? "تم تعديل السند"
-            : voucherKind === "receipt"
-              ? "تم إنشاء سند القبض"
-              : "تم إنشاء سند الصرف",
+        title: voucherEditTarget
+          ? "تم تعديل السند"
+          : voucherKind === "receipt"
+            ? "تم إنشاء سند القبض"
+            : "تم إنشاء سند الصرف",
       });
     },
     onError,
@@ -887,7 +890,11 @@ export default function StatementPage() {
     setVoucherKind(voucher.kind);
     setVAmount(String(voucher.amount ?? ""));
     setVDesc(voucher.description ?? "");
-    setVDate(voucher.voucherDate ? new Date(voucher.voucherDate).toISOString().slice(0, 10) : todayISO());
+    setVDate(
+      voucher.voucherDate
+        ? new Date(voucher.voucherDate).toISOString().slice(0, 10)
+        : todayISO(),
+    );
     setVLink(`${voucher.partyType}|${voucher.partyName}`);
     setVoucherDialog(true);
   };
@@ -906,7 +913,11 @@ export default function StatementPage() {
     setLedgerType(entry.type);
     setLedgerAmount(String(entry.amount ?? ""));
     setLedgerDesc(entry.description ?? "");
-    setLedgerDate(entry.entryDate ? new Date(entry.entryDate).toISOString().slice(0, 10) : todayISO());
+    setLedgerDate(
+      entry.entryDate
+        ? new Date(entry.entryDate).toISOString().slice(0, 10)
+        : todayISO(),
+    );
   };
 
   return (
@@ -1134,7 +1145,9 @@ export default function StatementPage() {
                                   setClientNewName(c.clientName);
                                   setClientPhoneField(c.phone ?? "");
                                   setClientNotesField(c.notes ?? "");
-                                  setClientOpeningField(String(c.openingBalance ?? 0));
+                                  setClientOpeningField(
+                                    String(c.openingBalance ?? 0),
+                                  );
                                 }}
                               >
                                 <Pencil className="w-4 h-4" />
@@ -1344,7 +1357,9 @@ export default function StatementPage() {
                 disabled={
                   !Number(ledgerAmount) ||
                   !ledgerDesc.trim() ||
-                  (ledgerEditTarget ? saveLedger.isPending : addLedger.isPending)
+                  (ledgerEditTarget
+                    ? saveLedger.isPending
+                    : addLedger.isPending)
                 }
                 onClick={() =>
                   ledgerEditTarget ? saveLedger.mutate() : addLedger.mutate()
@@ -1775,15 +1790,15 @@ export default function StatementPage() {
             </DialogHeader>
             <div className="space-y-3">
               <div>
-              <p className="text-sm mb-1.5 font-medium">اسم العميل</p>
-              <Input
-                value={clientNewName}
-                onChange={(e) => setClientNewName(e.target.value)}
-                placeholder="اسم العميل"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.
-              </p>
+                <p className="text-sm mb-1.5 font-medium">اسم العميل</p>
+                <Input
+                  value={clientNewName}
+                  onChange={(e) => setClientNewName(e.target.value)}
+                  placeholder="اسم العميل"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  سيتم تحديث الاسم في كل المعاملات والسندات المرتبطة به.
+                </p>
               </div>
               <div>
                 <p className="text-sm mb-1.5 font-medium">رقم التواصل</p>
@@ -2111,7 +2126,7 @@ export default function StatementPage() {
                       </Button>
                       <Button
                         size="sm"
-                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold no-print"
                         onClick={() => setPrintStatement(true)}
                       >
                         <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة
@@ -2270,7 +2285,7 @@ export default function StatementPage() {
               >
                 <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
-              <Button onClick={() => window.print()}>
+              <Button className="no-print" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 ml-1.5" /> طباعة
               </Button>
             </DialogFooter>
@@ -2426,7 +2441,7 @@ export default function StatementPage() {
                       </Button>
                       <Button
                         size="sm"
-                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold"
+                        className="bg-[hsl(43,65%,52%)] hover:bg-[hsl(43,65%,45%)] text-[hsl(220,40%,12%)] font-bold no-print"
                         onClick={() => setPrintClientStatement(true)}
                       >
                         <Printer className="w-4 h-4 ml-1.5" /> معاينة وطباعة
@@ -2586,7 +2601,7 @@ export default function StatementPage() {
               >
                 <FileSpreadsheet className="w-4 h-4 ml-1.5" /> تصدير Excel
               </Button>
-              <Button onClick={() => window.print()}>
+              <Button className="no-print" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 ml-1.5" /> طباعة
               </Button>
             </DialogFooter>
