@@ -81,7 +81,10 @@ export default function ReceiptPage() {
   const total = record.salePrice;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gray-100 font-sans">
+    <div
+      dir="rtl"
+      className="voucher-print-area min-h-screen bg-gray-100 font-sans"
+    >
       {/* Print controls — hidden in print */}
       <div className="print:hidden sticky top-0 z-10 flex items-center justify-between gap-2 bg-white border-b px-4 py-3">
         <a href={backHref}>

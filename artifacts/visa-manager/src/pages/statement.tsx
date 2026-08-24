@@ -303,7 +303,9 @@ function exportLedgerXlsx(
     rows.push([
       e.kind,
       La(e.date),
-      e.description,
+      (e.description || "")
+        .replace("لكم مقابل", "مقابل")
+        .replace("عليكم مقابل", "مقابل"),
       debit || "",
       credit || "",
       balLabel(run),
@@ -2768,11 +2770,6 @@ export default function StatementPage() {
                         : "صرفنا ل: "}
                     </span>
                     {printVoucher.partyName}
-                    {printVoucher.partyType === "agent" && (
-                      <span className="mr-2 text-xs text-[hsl(43,50%,40%)]">
-                        (وكيل)
-                      </span>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

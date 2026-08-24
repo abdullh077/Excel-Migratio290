@@ -390,3 +390,61 @@
     overflow: visible !important;
   }
 }
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 15mm 10mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+/* ==========================================
+   تنسيقات طباعة سندات القبض والصرف (مقاس A5)
+   ========================================== */
+@media print {
+  /* تخصيص صفحة مستقلة بمقاس A5 للسندات */
+  @page voucher-page {
+    size: A5 portrait; /* مقاس A5 طولي */
+    margin: 8mm 8mm 10mm 8mm;
+  }
+
+  .voucher-print-area {
+    page: voucher-page;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ضمان احتواء الجدول والتوقيعات داخل الورقة */
+  .voucher-print-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .voucher-print-area thead {
+    display: table-header-group;
+  }
+
+  .voucher-print-area tfoot {
+    display: table-footer-group;
+  }
+
+  .voucher-print-area tr {
+    break-inside: avoid;
+  }
+}
