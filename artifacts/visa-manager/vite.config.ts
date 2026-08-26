@@ -48,27 +48,13 @@ export default defineConfig({
         dir: 'rtl',
       },
       workbox: {
+        // App requires a live connection at all times: API requests are
+        // never intercepted or cached by the service worker, so the app
+        // can never serve stale data or fake an offline write. Only the
+        // static app shell (JS/CSS/HTML) is precached, which keeps the
+        // app installable without enabling any offline data behaviour.
         navigateFallbackDenylist: [/\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' &&
-              url.pathname.includes('/api/') &&
-              !url.pathname.includes('/api/auth/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: {
-                statuses: [200],
-              },
-            },
-          },
-        ],
+        runtimeCaching: [],
       },
     }),
     ...(process.env.NODE_ENV !== 'production' &&

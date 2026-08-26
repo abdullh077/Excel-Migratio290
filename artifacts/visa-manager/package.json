@@ -76,8 +76,6 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@tanstack/query-sync-storage-persister": "^5.101.4",
-    "@tanstack/react-query-persist-client": "^5.101.4",
     "xlsx": "^0.18.5"
   }
 }

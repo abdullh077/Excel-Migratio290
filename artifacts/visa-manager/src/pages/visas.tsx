@@ -8,8 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Search, Pencil, Trash2, MessageCircle, Printer } from "lucide-react";
 import { fmt, formatDate, today } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-// NOTE: src/lib/outbox.ts is created by another agent; API: enqueue(kind, payload, label)
-import { enqueue } from "@/lib/outbox";
 
 type Visa = any;
 
@@ -216,13 +214,6 @@ export default function VisasPage() {
     };
     if (editing) {
       update.mutate({ id: editing, payload });
-      return;
-    }
-
-    if (!navigator.onLine) {
-      enqueue("visa", payload, form.clientName);
-      setDialogOpen(false);
-      toast({ title: "حُفظت مؤقتاً على الجهاز", description: "ستُرفع تلقائياً عند عودة الإنترنت" });
       return;
     }
 

@@ -39,10 +39,14 @@ export const defaultQueryFn = async ({ queryKey }: { queryKey: readonly unknown[
   return apiRequest(url);
 };
 
-// Removes persisted query cache + API service-worker cache.
+// Removes any leftover persisted query cache / offline outbox / API
+// service-worker cache from older builds. The app no longer persists
+// query data or queues writes offline, but installed clients may still
+// carry these keys from before; wipe them so no stale data can resurface.
 export async function clearClientCaches(): Promise<void> {
   try {
     localStorage.removeItem("oboor-query-cache-v1");
+    localStorage.removeItem("oboor-outbox-v1");
   } catch {
     // ignore
   }

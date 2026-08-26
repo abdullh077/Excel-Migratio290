@@ -23,8 +23,6 @@ import {
 import { fmt, formatDate, parseDate, today } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-// NOTE: src/lib/outbox.ts is created by another agent; API: enqueue(kind, payload, label)
-import { enqueue } from "@/lib/outbox";
 
 type Umrah = any;
 
@@ -281,16 +279,6 @@ export default function UmrahPage() {
     };
     if (editing) {
       update.mutate({ id: editing, payload });
-      return;
-    }
-
-    if (!navigator.onLine) {
-      enqueue("umrah", payload, form.clientName);
-      setDialogOpen(false);
-      toast({
-        title: "حُفظت مؤقتاً على الجهاز",
-        description: "ستُرفع تلقائياً عند عودة الإنترنت",
-      });
       return;
     }
 

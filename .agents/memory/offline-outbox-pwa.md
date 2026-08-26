@@ -1,10 +1,10 @@
 ---
-name: Offline outbox + PWA pattern (visa manager)
-description: How offline support works — outbox, idempotency, PWA cache exclusions, cache wipe on login/logout
+name: Visa manager is online-only (offline mode explicitly rejected)
+description: The offline outbox + PWA data-caching system was fully removed at the user's explicit request; do not re-propose offline-first behavior for this app.
 ---
-- Offline creates go into a localStorage outbox (`oboor-outbox-v1`) and auto-upload on `online` event / app start; banner in AppLayout shows pending count.
-- **Idempotency rule:** every outbox upload sends `clientRequestId`; server inserts with `onConflictDoNothing` on a unique nullable `client_request_id` column (umrah_clients, other_visas) and returns the existing row on retry. Any new offline-capable create endpoint must follow this or lost responses create duplicates.
-- **Why:** architect review flagged duplicate-create risk on retry after uncertain delivery.
-- PWA (vite-plugin-pwa): precache shell + NetworkFirst for GET `/api/*` **excluding `/api/auth/*`** — caching auth resurrects stale sessions (security fail).
-- React Query cache is persisted to localStorage (`oboor-query-cache-v1`, 7d). `clearOfflineCaches()` must run on logout AND login success so one account's data never leaks to another on the same device.
-- drizzle-kit push can't add unique constraints non-interactively on tables with rows; apply via psql then RENAME CONSTRAINT to drizzle's `<table>_<col>_unique` naming so push sees no diff.
+- **Decision (2026-08-26):** user explicitly rejected any offline capability. Reasons stated: data must always live on the server so it's recoverable even if wiped locally, and so main/sub-account users always see synced, shared data. Do not reintroduce offline writes or cached data for this app without asking again.
+- Removed entirely: `src/lib/outbox.ts` (localStorage write queue, `oboor-outbox-v1`), the `!navigator.onLine` enqueue branches in umrah/visas create flows, the OfflineBanner in AppLayout, and the Workbox `NetworkFirst` runtime-caching rule for `/api/*` in `vite.config.ts` (now `runtimeCaching: []`).
+- Removed React Query persistence to localStorage (`oboor-query-cache-v1` via `PersistQueryClientProvider`/sync-storage-persister) — query cache is in-memory only per session now, so a device can never show stale data after reopening.
+- Added a global `OfflineGate` in `App.tsx`: when `navigator.onLine` is false, it blocks the entire app (including login) behind a full-screen "no internet connection" message — no page, form, or cached data is reachable while offline.
+- PWA installability (manifest + service worker precache of the static app shell) was deliberately kept — only the *data* caching/offline-write behavior was removed. If the user ever also wants to drop installability, that's a separate, explicit ask.
+- `clearClientCaches()` in `src/lib/api.ts` now also wipes the old `oboor-outbox-v1` key (in addition to `oboor-query-cache-v1` and the `api-cache` Cache Storage) so devices that installed earlier offline-capable builds don't retain stale local writes.
