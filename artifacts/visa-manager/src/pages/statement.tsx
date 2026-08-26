@@ -47,6 +47,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
+import { offlineFetch } from "@/lib/offline/offlineFetch";
 
 // Exact currency formatter as production `nt`
 function nt(e: number | null | undefined): string {
@@ -85,123 +86,171 @@ const OFFICE_KEY = ["settings-office"];
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
-// API helpers (exact endpoints/payloads)
+// API helpers (exact endpoints/payloads) — routed through offlineFetch so
+// every one of these keeps working (read from cache / queue the write) with
+// no internet connection. `priorRow` is passed through for updates/deletes
+// that need to reverse a cross-entity balance delta (see lib/offline/affects.ts).
 const listAgents = () =>
-  fetch("/api/statement/agents", { credentials: "include" }).then(handle);
+  offlineFetch("/api/statement/agents", { credentials: "include" }).then(handle);
 const createAgent = (body: any) =>
-  fetch("/api/statement/agents", {
+  offlineFetch("/api/statement/agents", {
     method: "POST",
     credentials: "include",
     headers: jsonHeaders,
     body: JSON.stringify(body),
   }).then(handle);
-const updateAgent = (id: any, body: any) =>
-  fetch(`/api/statement/agents/${id}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  }).then(handle);
-const deleteAgent = (id: any) =>
-  fetch(`/api/statement/agents/${id}`, {
+const updateAgent = (id: any, body: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/agents/${id}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
+const deleteAgent = (id: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/agents/${id}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+    { priorRow },
+  ).then(handle);
+const updateClient = (body: any, priorRow?: any) =>
+  offlineFetch(
+    "/api/statement/clients",
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
+const deleteClient = (id: any) =>
+  offlineFetch(`/api/statement/clients/${id}`, {
     method: "DELETE",
     credentials: "include",
-  }).then(handle);
-const updateClient = (body: any) =>
-  fetch("/api/statement/clients", {
-    method: "PUT",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
   }).then(handle);
 const getAgent = (id: any, from?: string, to?: string) => {
   const qs = new URLSearchParams();
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   const s = qs.toString();
-  return fetch(`/api/statement/agents/${id}${s ? `?${s}` : ""}`, {
+  return offlineFetch(`/api/statement/agents/${id}${s ? `?${s}` : ""}`, {
     credentials: "include",
   }).then(handle);
 };
-const createPayment = (id: any, body: any) =>
-  fetch(`/api/statement/agents/${id}/payments`, {
-    method: "POST",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  }).then(handle);
-const deletePayment = (id: any) =>
-  fetch(`/api/statement/payments/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  }).then(handle);
+const createPayment = (id: any, body: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/agents/${id}/payments`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
+const deletePayment = (id: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/payments/${id}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+    { priorRow },
+  ).then(handle);
 const listLedger = () =>
-  fetch("/api/statement/ledger", { credentials: "include" }).then(handle);
+  offlineFetch("/api/statement/ledger", { credentials: "include" }).then(handle);
 const createLedger = (body: any) =>
-  fetch("/api/statement/ledger", {
+  offlineFetch("/api/statement/ledger", {
     method: "POST",
     credentials: "include",
     headers: jsonHeaders,
     body: JSON.stringify(body),
   }).then(handle);
-const deleteLedger = (id: any) =>
-  fetch(`/api/statement/ledger/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  }).then(handle);
-const updateLedger = (id: any, body: any) =>
-  fetch(`/api/statement/ledger/${id}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  }).then(handle);
+const deleteLedger = (id: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/ledger/${id}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+    { priorRow },
+  ).then(handle);
+const updateLedger = (id: any, body: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/statement/ledger/${id}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
 const getSummary = () =>
-  fetch("/api/statement/summary", { credentials: "include" }).then(handle);
+  offlineFetch("/api/statement/summary", { credentials: "include" }).then(handle);
 const listClients = () =>
-  fetch("/api/statement/clients", { credentials: "include" }).then(handle);
+  offlineFetch("/api/statement/clients", { credentials: "include" }).then(handle);
 const getClientDetails = (name: string, from?: string, to?: string) => {
   const qs = new URLSearchParams({ name });
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
-  return fetch(`/api/statement/clients/details?${qs.toString()}`, {
+  return offlineFetch(`/api/statement/clients/details?${qs.toString()}`, {
     credentials: "include",
   }).then(handle);
 };
 const listVouchers = () =>
-  fetch("/api/vouchers", { credentials: "include" }).then(handle);
+  offlineFetch("/api/vouchers", { credentials: "include" }).then(handle);
 const createVoucher = (body: any) =>
-  fetch("/api/vouchers", {
+  offlineFetch("/api/vouchers", {
     method: "POST",
     credentials: "include",
     headers: jsonHeaders,
     body: JSON.stringify(body),
   }).then(handle);
-const deleteVoucher = (id: any) =>
-  fetch(`/api/vouchers/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  }).then(handle);
-const updateVoucher = (id: any, body: any) =>
-  fetch(`/api/vouchers/${id}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  }).then(handle);
+const deleteVoucher = (id: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/vouchers/${id}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+    { priorRow },
+  ).then(handle);
+const updateVoucher = (id: any, body: any, priorRow?: any) =>
+  offlineFetch(
+    `/api/vouchers/${id}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
 const getOffice = () =>
-  fetch("/api/settings/office", { credentials: "include" }).then(handle);
+  offlineFetch("/api/settings/office", { credentials: "include" }).then(handle);
 const listOpening = () =>
-  fetch("/api/statement/opening", { credentials: "include" }).then(handle);
-const saveOpening = (body: any) =>
-  fetch("/api/statement/opening", {
-    method: "POST",
-    credentials: "include",
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  }).then(handle);
+  offlineFetch("/api/statement/opening", { credentials: "include" }).then(handle);
+const saveOpening = (body: any, priorRow?: any) =>
+  offlineFetch(
+    "/api/statement/opening",
+    {
+      method: "POST",
+      credentials: "include",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    },
+    { priorRow },
+  ).then(handle);
 const listAgentNames = () =>
-  fetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
+  offlineFetch("/api/statement/agent-names", { credentials: "include" }).then(handle);
 
 async function handle(res: Response) {
   if (!res.ok) {
@@ -637,7 +686,10 @@ export default function StatementPage() {
   });
 
   const openingMut = useMutation({
-    mutationFn: saveOpening,
+    mutationFn: (body: any) => {
+      const prior = (openingEntries ?? []).find((e: any) => e.partyType === body.partyType && e.name?.trim() === body.name?.trim());
+      return saveOpening(body, prior ? { openingBalance: prior.amount } : undefined);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["statement-opening"] });
       qc.invalidateQueries({ queryKey: AGENTS_KEY });
@@ -678,12 +730,16 @@ export default function StatementPage() {
   const saveAgent = useMutation({
     mutationFn: () =>
       editing
-        ? updateAgent(editing.id, {
-            name: nameField.trim(),
-            phone: agentPhoneField.trim() || undefined,
-            notes: agentNotesField.trim() || undefined,
-            openingBalance: Number(agentOpeningField || 0),
-          })
+        ? updateAgent(
+            editing.id,
+            {
+              name: nameField.trim(),
+              phone: agentPhoneField.trim() || undefined,
+              notes: agentNotesField.trim() || undefined,
+              openingBalance: Number(agentOpeningField || 0),
+            },
+            editing,
+          )
         : createAgent({
             name: nameField.trim(),
             phone: agentPhoneField.trim() || undefined,
@@ -704,7 +760,7 @@ export default function StatementPage() {
   });
 
   const delAgent = useMutation({
-    mutationFn: (id: any) => deleteAgent(id),
+    mutationFn: (id: any) => deleteAgent(id, (agents ?? []).find((a: any) => a.id === id)),
     onSuccess: () => {
       invalidateAll();
       setDeleteTarget(null);
@@ -718,13 +774,16 @@ export default function StatementPage() {
 
   const renameClient = useMutation({
     mutationFn: () =>
-      updateClient({
-        oldName: clientEditTarget?.clientName,
-        newName: clientNewName.trim(),
-        phone: clientPhoneField.trim() || undefined,
-        notes: clientNotesField.trim() || undefined,
-        openingBalance: Number(clientOpeningField || 0),
-      }),
+      updateClient(
+        {
+          oldName: clientEditTarget?.clientName,
+          newName: clientNewName.trim(),
+          phone: clientPhoneField.trim() || undefined,
+          notes: clientNotesField.trim() || undefined,
+          openingBalance: Number(clientOpeningField || 0),
+        },
+        clientEditTarget,
+      ),
     onSuccess: (updated: any) => {
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
       qc.invalidateQueries({ queryKey: VOUCHERS_KEY });
@@ -743,11 +802,7 @@ export default function StatementPage() {
   });
 
   const delClient = useMutation({
-    mutationFn: (id: number) =>
-      fetch(`/api/statement/clients/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      }).then(handle),
+    mutationFn: (id: number) => deleteClient(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CLIENTS_KEY });
       setClientDeleteTarget(null);
@@ -761,11 +816,15 @@ export default function StatementPage() {
 
   const addPayment = useMutation({
     mutationFn: () =>
-      createPayment(selected, {
-        amount: Number(payAmount),
-        direction: payDirection,
-        notes: payNotes.trim() || undefined,
-      }),
+      createPayment(
+        selected,
+        {
+          amount: Number(payAmount),
+          direction: payDirection,
+          notes: payNotes.trim() || undefined,
+        },
+        (agents ?? []).find((a: any) => a.id === selected),
+      ),
     onSuccess: () => {
       invalidateAll();
       setPayAmount("");
@@ -776,7 +835,11 @@ export default function StatementPage() {
   });
 
   const delPayment = useMutation({
-    mutationFn: (id: any) => deletePayment(id),
+    mutationFn: (id: any) => {
+      const paymentRow = (detail?.payments ?? []).find((p: any) => p.id === id);
+      const agentRow = (agents ?? []).find((a: any) => a.id === selected);
+      return deletePayment(id, paymentRow ? { ...paymentRow, agentId: selected, agentName: agentRow?.name } : undefined);
+    },
     onSuccess: () => {
       invalidateAll();
       toast({ title: "تم حذف الدفعة" });
@@ -846,7 +909,7 @@ export default function StatementPage() {
         voucherDate: vDate ? new Date(vDate).toISOString() : undefined,
       };
       return voucherEditTarget
-        ? updateVoucher(voucherEditTarget.id, body)
+        ? updateVoucher(voucherEditTarget.id, body, voucherEditTarget)
         : createVoucher(body);
     },
     onSuccess: () => {
@@ -869,7 +932,7 @@ export default function StatementPage() {
   });
 
   const delVoucher = useMutation({
-    mutationFn: (id: any) => deleteVoucher(id),
+    mutationFn: (id: any) => deleteVoucher(id, (vouchers ?? []).find((v: any) => v.id === id)),
     onSuccess: () => {
       invalidateAll();
       toast({ title: "تم حذف السند" });

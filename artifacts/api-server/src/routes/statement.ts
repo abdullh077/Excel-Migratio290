@@ -45,6 +45,7 @@ const LedgerEditBody = z.object({
   amount: positiveMoney,
   description: z.string().trim().min(1, "البيان مطلوب"),
   entryDate: z.string().optional(),
+  clientRequestId: z.string().trim().optional(),
 });
 
 function parseDate(value: string | undefined, label: string): Date {
@@ -368,7 +369,10 @@ router.post("/statement/agents/:id/payments", async (req, res): Promise<void> =>
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
 
-  const { createVoucher: doCreateVoucher, paidAt, ...rest } = parsed.data as any;
+  const { createVoucher: doCreateVoucher, clientRequestId: rawRequestId, paidAt, ...rest } = parsed.data as any;
+  // Empty offline-outbox ids must not share the unique key.
+  const clientRequestId =
+    typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"agent-id:" + officeId + ":" + params.data.id}))`);
     const [agent] = await tx.select().from(agentsTable)
@@ -376,12 +380,22 @@ router.post("/statement/agents/:id/payments", async (req, res): Promise<void> =>
     if (!agent) return null;
     await lockAccountNames(tx, officeId, [{ scope: "agent", name: agent.name }]);
 
-    const [payment] = await tx.insert(agentPaymentsTable).values({
+    const payment = (await tx.insert(agentPaymentsTable).values({
       ...rest,
       userId: officeId,
       agentId: agent.id,
       paidAt: paidAt ? new Date(paidAt) : new Date(),
-    }).returning();
+      clientRequestId,
+    }).onConflictDoNothing().returning())[0] ?? null;
+    if (!payment) {
+      if (!clientRequestId) return null;
+      const [existingPayment] = await tx.select().from(agentPaymentsTable)
+        .where(eq(agentPaymentsTable.clientRequestId, clientRequestId));
+      if (!existingPayment) return null;
+      const [voucher] = await tx.select({ id: vouchersTable.id }).from(vouchersTable)
+        .where(eq(vouchersTable.agentPaymentId, existingPayment.id));
+      return { payment: existingPayment, voucherId: voucher?.id ?? null };
+    }
     let voucherId: number | null = null;
     if (doCreateVoucher) {
       const kind = rest.direction === "from_agent" ? "receipt" : "payment";
@@ -399,7 +413,10 @@ router.post("/statement/agents/:id/payments", async (req, res): Promise<void> =>
     }
     return { payment, voucherId };
   });
-  if (!result) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!result) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
   const { payment, voucherId } = result;
 
   res.status(201).json({ id: payment.id, agentId: payment.agentId, amount: Number(payment.amount), direction: payment.direction, paidAt: payment.paidAt.toISOString(), notes: payment.notes, voucherId, createdAt: payment.createdAt.toISOString() });
@@ -771,13 +788,30 @@ router.post("/statement/ledger", async (req, res): Promise<void> => {
   let entryDate: Date;
   try { entryDate = parseDate(parsed.data.entryDate, "تاريخ القيد"); }
   catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-  const [row] = await db.insert(ledgerEntriesTable).values({
+  const { clientRequestId: rawRequestId, ...rest } = parsed.data;
+  // Empty offline-outbox ids must not share the unique key.
+  const clientRequestId =
+    typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
+  const row = (await db.insert(ledgerEntriesTable).values({
     userId: officeId,
-    type: parsed.data.type,
-    amount: String(parsed.data.amount),
-    description: parsed.data.description,
+    type: rest.type,
+    amount: String(rest.amount),
+    description: rest.description,
     entryDate,
-  }).returning();
+    clientRequestId,
+  }).onConflictDoNothing().returning())[0] ?? null;
+  if (!row) {
+    if (clientRequestId) {
+      const [existing] = await db.select().from(ledgerEntriesTable)
+        .where(eq(ledgerEntriesTable.clientRequestId, clientRequestId));
+      if (existing) {
+        res.status(201).json({ id: existing.id, type: existing.type, amount: Number(existing.amount), description: existing.description, entryDate: existing.entryDate.toISOString(), createdAt: existing.createdAt.toISOString() });
+        return;
+      }
+    }
+    res.status(409).json({ error: "Conflict" });
+    return;
+  }
   res.status(201).json({ id: row.id, type: row.type, amount: Number(row.amount), description: row.description, entryDate: row.entryDate.toISOString(), createdAt: row.createdAt.toISOString() });
 });
 

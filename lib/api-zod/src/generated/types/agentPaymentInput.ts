@@ -13,4 +13,5 @@ export interface AgentPaymentInput {
   paidAt?: string;
   notes?: string;
   createVoucher?: boolean;
+  clientRequestId?: string;
 }

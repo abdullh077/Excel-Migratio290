@@ -32,6 +32,8 @@ export const agentPaymentsTable = pgTable("agent_payments", {
   direction: text("direction").notNull(), // from_agent | to_agent
   paidAt: timestamp("paid_at").defaultNow().notNull(),
   notes: text("notes"),
+  // Idempotency key for offline-outbox uploads.
+  clientRequestId: text("client_request_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type AgentPayment = typeof agentPaymentsTable.$inferSelect;
@@ -46,6 +48,8 @@ export const ledgerEntriesTable = pgTable("ledger_entries", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description").notNull(),
   entryDate: timestamp("entry_date").defaultNow().notNull(),
+  // Idempotency key for offline-outbox uploads.
+  clientRequestId: text("client_request_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type LedgerEntry = typeof ledgerEntriesTable.$inferSelect;

@@ -34,6 +34,10 @@ const VoucherEditBody = z.object({
   voucherDate: z.string().optional(),
 });
 
+const CreateVoucherBody = VoucherEditBody.extend({
+  clientRequestId: z.string().trim().optional(),
+});
+
 function parseVoucherDate(value: string | undefined): Date {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) throw new Error("تاريخ السند غير صحيح");
@@ -56,10 +60,13 @@ router.get("/vouchers", async (req, res): Promise<void> => {
 });
 
 router.post("/vouchers", async (req, res): Promise<void> => {
-  const parsed = VoucherEditBody.safeParse(req.body);
+  const parsed = CreateVoucherBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
-  const { voucherDate, ...rest } = parsed.data;
+  const { clientRequestId: rawRequestId, voucherDate, ...rest } = parsed.data;
+  // Empty offline-outbox ids must not share the unique key.
+  const clientRequestId =
+    typeof rawRequestId === "string" && rawRequestId.trim() !== "" ? rawRequestId : null;
   let date: Date;
   try { date = parseVoucherDate(voucherDate); } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   const row = await db.transaction(async (tx) => {
@@ -73,9 +80,19 @@ router.post("/vouchers", async (req, res): Promise<void> => {
     if (rest.partyType === "agent") rest.partyName = await ensureAgent(tx, officeId, rest.partyName);
     if (rest.partyType === "client") rest.partyName = await ensureClientAccount(tx, officeId, rest.partyName, undefined);
     return (await tx.insert(vouchersTable)
-      .values({ ...rest, amount: String(rest.amount), userId: officeId, voucherDate: date })
-      .returning())[0];
+      .values({ ...rest, amount: String(rest.amount), userId: officeId, voucherDate: date, clientRequestId })
+      .onConflictDoNothing()
+      .returning())[0] ?? null;
   });
+  if (!row) {
+    if (clientRequestId) {
+      const [existing] = await db.select().from(vouchersTable)
+        .where(eq(vouchersTable.clientRequestId, clientRequestId));
+      if (existing) { res.status(201).json(toVoucher(existing)); return; }
+    }
+    res.status(409).json({ error: "Conflict" });
+    return;
+  }
   res.status(201).json(toVoucher(row));
 });
 

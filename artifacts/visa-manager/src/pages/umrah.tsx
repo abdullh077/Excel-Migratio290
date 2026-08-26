@@ -23,6 +23,7 @@ import {
 import { fmt, formatDate, parseDate, today } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { offlineFetch } from "@/lib/offline/offlineFetch";
 
 type Umrah = any;
 
@@ -49,7 +50,7 @@ const EMPTY = {
 type Errors = Partial<Record<string, string>>;
 
 async function apiGet(url: string) {
-  const res = await fetch(url, { credentials: "include" });
+  const res = await offlineFetch(url, { credentials: "include" });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }
@@ -123,7 +124,7 @@ export default function UmrahPage() {
 
   const create = useMutation({
     mutationFn: async (payload: any) => {
-      const res = await fetch("/api/umrah", {
+      const res = await offlineFetch("/api/umrah", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -148,12 +149,17 @@ export default function UmrahPage() {
 
   const update = useMutation({
     mutationFn: async ({ id, payload }: { id: number; payload: any }) => {
-      const res = await fetch(`/api/umrah/${id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const priorRow = clients.find((c: Umrah) => c.id === id);
+      const res = await offlineFetch(
+        `/api/umrah/${id}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        { priorRow },
+      );
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
     },
@@ -172,10 +178,15 @@ export default function UmrahPage() {
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/umrah/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      const priorRow = clients.find((c: Umrah) => c.id === id);
+      const res = await offlineFetch(
+        `/api/umrah/${id}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+        { priorRow },
+      );
       if (!res.ok) throw new Error(String(res.status));
       // DELETE may return JSON ({message}) or an empty body; don't assume either.
       return true;
@@ -195,12 +206,17 @@ export default function UmrahPage() {
 
   const patchStatus = useMutation({
     mutationFn: async ({ id, payload }: { id: number; payload: any }) => {
-      const res = await fetch(`/api/umrah/${id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const priorRow = clients.find((c: Umrah) => c.id === id);
+      const res = await offlineFetch(
+        `/api/umrah/${id}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        { priorRow },
+      );
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
     },

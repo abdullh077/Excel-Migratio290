@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/useAuth";
 import { apiRequest, clearClientCaches } from "@/lib/api";
+import { clearIdentity } from "@/lib/offline/authCache";
 
 interface NavItem {
   href: string;
@@ -77,6 +78,7 @@ function Sidebar({
     },
     onSuccess: async () => {
       await clearClientCaches();
+      await clearIdentity();
       queryClient.clear();
       onClose();
       setLocation("/login");

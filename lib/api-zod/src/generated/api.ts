@@ -318,7 +318,8 @@ export const CreateAgentPaymentBody = zod.object({
   "direction": zod.enum(['from_agent', 'to_agent']),
   "paidAt": zod.string().optional(),
   "notes": zod.string().optional(),
-  "createVoucher": zod.boolean().optional()
+  "createVoucher": zod.boolean().optional(),
+  "clientRequestId": zod.string().optional()
 })
 
 export const CreateAgentPaymentResponse = zod.object({
@@ -541,7 +542,8 @@ export const CreateVoucherBody = zod.object({
   "partyName": zod.string(),
   "amount": zod.number(),
   "description": zod.string().optional(),
-  "voucherDate": zod.string().optional()
+  "voucherDate": zod.string().optional(),
+  "clientRequestId": zod.string().optional()
 })
 
 export const CreateVoucherResponse = zod.object({

@@ -1176,6 +1176,8 @@ components:
           type: string
         createVoucher:
           type: boolean
+        clientRequestId:
+          type: string
 
     StatementTx:
       type: object
@@ -1352,6 +1354,8 @@ components:
         description:
           type: string
         voucherDate:
+          type: string
+        clientRequestId:
           type: string
 
     UmrahClient:

@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Printer, FileDown, ArrowRight } from "lucide-react";
 import { fmt, formatDate } from "@/lib/utils";
 import { PrintHeader } from "@/components/print/PrintHeader";
+import { offlineFetch } from "@/lib/offline/offlineFetch";
 
 const OFFICE_FALLBACK = "مكتب اللواء الغربي";
 const SUBTITLE_FALLBACK = "للنقل والسفريات والسياحة";
 const PHONE_FALLBACK = "771436479";
 
 async function fetchJson(url: string) {
-  const res = await fetch(url, { credentials: "include" });
+  const res = await offlineFetch(url, { credentials: "include" });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }

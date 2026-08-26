@@ -20,6 +20,8 @@ export const vouchersTable = pgTable("vouchers", {
   agentPaymentId: integer("agent_payment_id").references(() => agentPaymentsTable.id, {
     onDelete: "set null",
   }),
+  // Idempotency key for offline-outbox uploads.
+  clientRequestId: text("client_request_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type Voucher = typeof vouchersTable.$inferSelect;

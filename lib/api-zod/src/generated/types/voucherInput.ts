@@ -15,4 +15,5 @@ export interface VoucherInput {
   amount: number;
   description?: string;
   voucherDate?: string;
+  clientRequestId?: string;
 }

@@ -9,7 +9,8 @@
 - [Date parsing for counters](date-parsing-counters.md) — DB date strings vary in format; parse defensively and return null (hide counter) instead of NaN.
 - [Visa Manager multi-tenancy](visa-manager-multitenancy.md) — office-scoped isolation (officeId = owner id; subs inherit); legacy role "admin" is normalized to "provider" at login/auth.
 - [Session security baseline](session-security-baseline.md) — prod needs trust proxy + secure/lax cookie + session.regenerate on login; invisible in dev, fails audit in prod.
-- [Visa manager: online-only](offline-outbox-pwa.md) — offline outbox/PWA data-caching removed at user's explicit request (2026-08-26); app now blocks entirely with no-internet screen when offline; don't re-propose offline mode.
+- [Visa manager offline mode timeline](offline-outbox-pwa.md) — offline support was removed then reinstated; check current code, don't assume either state.
+- [Visa manager offline sync architecture](offline-sync-architecture.md) — fetch-layer offline read/write; outbox MUST scope by current office id (multi-tenant leak risk); client-list-by-name id gotcha.
 - [Agent statement](agent-statement.md) — agents link by text name (rename must retag visas+umrah+agent vouchers); agent balance now purchase-based (opening + transferred + paidTo − purchases − paidFrom), btrim name matching; standalone vouchers fold in for both agents & clients; opening entries via /statement/opening tab; office-logo branding feature removed (login uses fixed image).
 - [Autoscale scheduled work](autoscale-scheduled-work.md) — no cron on autoscale; run "daily" jobs as a lazy once-per-day check on authenticated activity (e.g. daily backup on any provider request).
 - [Generated hooks pattern](orval-generated-hooks.md) — mutations are export const (not export function); UseQueryOptions requires queryKey in v5; pass queryKey from getXQueryKey() when using enabled option.
