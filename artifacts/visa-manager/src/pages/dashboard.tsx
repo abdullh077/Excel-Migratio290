@@ -264,7 +264,6 @@ export default function DashboardPage() {
                       <tr key={o.id ?? i} className="border-b last:border-0">
                         <td className="px-4 py-2">
                           <div className="font-medium text-sm">{o.clientName}</div>
-                          <div className="text-xs text-muted-foreground" dir="ltr">{o.phone}</div>
                         </td>
                         <td className="px-4 py-2 text-left font-bold text-red-600" dir="ltr">
                           {nt(o.clientBalance)}
