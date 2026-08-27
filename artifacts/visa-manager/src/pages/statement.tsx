@@ -45,37 +45,9 @@ import {
   Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ExcelJS from "exceljs";
 import { PrintHeader, PrintFooter, PrintWatermark } from "@/components/print/PrintHeader";
 import { offlineFetch } from "@/lib/offline/offlineFetch";
-
-// Exact currency formatter as production `nt`
-function nt(e: number | null | undefined): string {
-  return e == null
-    ? "0 ر.س"
-    : e.toLocaleString("ar-SA-u-ca-gregory", {
-        style: "currency",
-        currency: "SAR",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
-}
-
-// Exact date formatter as production `La`
-function La(e: string | null | undefined): string {
-  if (!e) return "-";
-  try {
-    const t = new Date(e);
-    if (isNaN(t.getTime())) return e;
-    return t.toLocaleDateString("ar-SA-u-ca-gregory", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-  } catch {
-    return e;
-  }
-}
+import { nt, La, exportLedgerXlsx } from "@/lib/statementExport";
 
 const AGENTS_KEY = ["statement-agents"];
 const LEDGER_KEY = ["statement-ledger"];
@@ -305,106 +277,6 @@ function BalanceBadge({ balance }: { balance: number }) {
       مسدَّد
     </Badge>
   );
-}
-
-// Export ledger statement to an RTL xlsx file (same columns as LedgerTable, with opening row and totals)
-async function exportLedgerXlsx(
-  ledger: any,
-  agentName: string,
-  from?: string,
-  to?: string,
-  entity: "agent" | "client" = "agent",
-) {
-  const opening = Number(ledger?.opening) || 0;
-  let run = opening;
-  const balLabel = (v: number) =>
-    v > 0
-      ? `${Math.abs(v)} (عليه)`
-      : v < 0
-        ? `${Math.abs(v)} (له)`
-        : "0 (مسدَّد)";
-  const header = [
-    "نوع الحركة",
-    "التاريخ",
-    "البيان",
-    "مدين (عليه)",
-    "دائن (له)",
-    "الرصيد بعد العملية",
-  ];
-  const rows: any[][] = [
-    [
-      "الرصيد الافتتاحي",
-      ledger?.from ? La(ledger.from) : "—",
-      "رصيد ما قبل الفترة",
-      "",
-      "",
-      balLabel(opening),
-    ],
-  ];
-  let totalDebit = 0;
-  let totalCredit = 0;
-  for (const e of ledger?.entries ?? []) {
-    const debit = Number(e.debit) || 0;
-    const credit = Number(e.credit) || 0;
-    run += debit - credit;
-    totalDebit += debit;
-    totalCredit += credit;
-    rows.push([
-      e.kind,
-      La(e.date),
-      e.description || "",
-      debit || "",
-      credit || "",
-      balLabel(run),
-    ]);
-  }
-  const final = opening + totalDebit - totalCredit;
-  rows.push(["", "", "الإجمالي", totalDebit, totalCredit, balLabel(final)]);
-  rows.push([
-    "",
-    "",
-    final > 0
-      ? `عليكم مبلغ ${nt(final)}`
-      : final < 0
-        ? `لكم مبلغ ${nt(-final)}`
-        : "الرصيد مسدَّد بالكامل — لا مستحقات",
-    "",
-    "",
-    "العملة: ريال سعودي",
-  ]);
-  const title = `كشف حساب تفصيلي ${entity === "client" ? "للعميل" : "للوكيل"}: ${agentName}`;
-  const period =
-    from || to
-      ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
-      : "عن كامل الفترة حتى تاريخه";
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("كشف الحساب", { views: [{ rightToLeft: true }] });
-  ws.columns = [
-    { width: 16 },
-    { width: 18 },
-    { width: 45 },
-    { width: 14 },
-    { width: 14 },
-    { width: 22 },
-  ];
-  ws.addRow([title]);
-  ws.addRow([period]);
-  ws.addRow([]);
-  ws.addRow(header);
-  for (const r of rows) ws.addRow(r);
-
-  const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `كشف حساب - ${agentName}.xlsx`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 // Ledger-style detailed statement table (كشف حساب تفصيلي بنمط دفتر الأستاذ)
