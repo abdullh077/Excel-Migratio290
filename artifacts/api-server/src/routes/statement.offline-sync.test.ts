@@ -184,3 +184,84 @@ test("client balance stays correct after a replayed offline batch (visa sale + v
   assert.equal(found.txCount, 1, "exactly one visa transaction, not two");
   assert.equal(found.balance, 400);
 });
+
+// The tests above cover one device retrying its own queued write. These cover
+// the other offline-sync risk: TWO devices, each with their own local queue,
+// editing/deleting the same server record while both are offline. Every
+// amount in this app is stored as an absolute value and every balance is
+// recomputed live from current rows (never a stored running total), so a
+// race here should never double-count or leave a merged/NaN value — it
+// should resolve deterministically to whichever edit synced last, or fail
+// loudly (never silently) when one device's queued op targets a record the
+// other device already deleted.
+
+test("editing the same ledger entry from two devices resolves to one deterministic value, never a doubled or corrupted total", async () => {
+  const created = await api("POST", "/api/statement/ledger", { type: "income", amount: 100, description: `قيد تعارض ${suffix}` });
+  assert.equal(created.status, 201);
+  const entryId = created.json.id;
+
+  // Both devices were offline with the same original row (amount 100) and
+  // each queued its own full-body edit locally. Device A's outbox drains
+  // first once it reconnects; device B's drains a moment later — outbox.ts
+  // always resends the full stored body, exactly like this.
+  const deviceAEdit = { type: "income", amount: 150, description: `تعديل جهاز أ ${suffix}` };
+  const deviceBEdit = { type: "income", amount: 200, description: `تعديل جهاز ب ${suffix}` };
+
+  const resA = await api("PUT", `/api/statement/ledger/${entryId}`, deviceAEdit);
+  const resB = await api("PUT", `/api/statement/ledger/${entryId}`, deviceBEdit);
+  assert.equal(resA.status, 200, "device A's edit must be accepted, not silently dropped");
+  assert.equal(resB.status, 200, "device B's edit must be accepted, not silently dropped");
+
+  const list = await api("GET", "/api/statement/ledger");
+  const rows = list.json.filter((r: any) => r.id === entryId);
+  assert.equal(rows.length, 1, "the edit race must never leave a duplicated row");
+  assert.equal(rows[0].amount, 200, "the edit that synced last must be the one that sticks, not a merge of both");
+  assert.equal(rows[0].description, deviceBEdit.description);
+});
+
+test("an edit queued offline before another device deletes the same ledger entry fails visibly instead of resurrecting it", async () => {
+  const created = await api("POST", "/api/statement/ledger", { type: "expense", amount: 50, description: `قيد سيُحذف ${suffix}` });
+  assert.equal(created.status, 201);
+  const entryId = created.json.id;
+
+  // Device A reconnects first and its queued delete syncs.
+  const del = await api("DELETE", `/api/statement/ledger/${entryId}`);
+  assert.equal(del.status, 200);
+
+  // Device B queued an edit to the same entry while it still existed, and
+  // only reconnects afterward.
+  const staleEdit = await api("PUT", `/api/statement/ledger/${entryId}`, { type: "expense", amount: 999, description: `تعديل متأخر ${suffix}` });
+  assert.equal(staleEdit.status, 404, "an edit to an already-deleted record must fail loudly (so it surfaces as a failed sync), never resurrect it with stale data");
+
+  const list = await api("GET", "/api/statement/ledger");
+  assert.equal(list.json.some((r: any) => r.id === entryId), false, "the deleted entry must never reappear because of a stale queued edit");
+});
+
+test("editing the same agent-payment voucher from two devices keeps the agent balance a single consistent number", async () => {
+  const agentName = `وكيل تعارض ${suffix}`;
+  const createAgent = await api("POST", "/api/statement/agents", { name: agentName, openingBalance: 0 });
+  assert.equal(createAgent.status, 201);
+  const agentId = createAgent.json.id;
+
+  const payment = await api("POST", `/api/statement/agents/${agentId}/payments`, { amount: 300, direction: "to_agent", createVoucher: true });
+  assert.equal(payment.status, 201);
+  const voucherId = payment.json.voucherId;
+  assert.ok(voucherId, "createVoucher must produce a linked voucher to edit");
+
+  // Both devices were offline with the same original voucher (amount 300)
+  // and each queued its own edit; device A reconnects first, device B second.
+  const resA = await api("PUT", `/api/vouchers/${voucherId}`, { kind: "payment", partyType: "agent", partyName: agentName, amount: 450 });
+  const resB = await api("PUT", `/api/vouchers/${voucherId}`, { kind: "payment", partyType: "agent", partyName: agentName, amount: 500 });
+  assert.equal(resA.status, 200, "device A's edit must be accepted, not silently dropped");
+  assert.equal(resB.status, 200, "device B's edit must be accepted, not silently dropped");
+
+  // The linked agent payment is kept in lockstep with the voucher by the
+  // same PUT (see routes/vouchers.ts) — it must move with whichever edit
+  // won, never stay at an intermediate value and never be counted twice.
+  const details = await api("GET", `/api/statement/agents/${agentId}`);
+  assert.equal(details.json.totals.paidTo, 500, "paidTo must reflect the last edit exactly once, not the sum of both edits");
+  // balance = opening(0) + transferred(0) + paidTo(500) - totalPurchases(0) - paidFrom(0) = 500.
+  // If the edit race double-counted (e.g. summed both edits into paidTo), this would be 950 instead.
+  assert.equal(details.json.totals.balance, 500);
+  assert.equal(details.json.payments.length, 1, "still exactly one payment — the edit race must not duplicate it");
+});

@@ -30,3 +30,17 @@ force-pushing or manually ALTERing around the symptom), so the fix is versioned 
 freshly provisioned or already drifted — self-heals the next time the existing post-merge push
 step runs. Never use `push --force` to get past a data-loss prompt without first understanding
 which table it targets.
+
+**2026-08-27 update — the schema-file fix alone did not stop the drift.** Correcting
+`sessions.ts` to declare `"session"` (singular) was necessary but not sufficient: the actual
+orphaned `sessions` (plural, `text`-column) table was still physically sitting in the live DB with
+old rows. `drizzle-kit push` still saw it as an unknown table and proposed to drop it (data-loss
+prompt), which still can't be confirmed non-interactively — so push kept failing silently for
+every unrelated schema change after that point, and `agents`/`client_accounts` drifted again
+(missing `client_request_id`) even though the schema file was already correct. The real fix was
+dropping the dead `sessions` table itself (`DROP TABLE sessions;` — confirmed unused: nothing in
+the codebase queries it, `connect-pg-simple` only touches `session` singular). After that, `push`
+went to a clean "No changes detected" / "Changes applied" with no prompt. **Lesson: when push
+still won't run non-interactively after the schema file looks correct, check for a leftover
+physical orphan table in the DB, not just a declaration mismatch — the fix isn't done until `push`
+completes cleanly with zero prompts.**
