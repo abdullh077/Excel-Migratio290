@@ -40,39 +40,49 @@ export function OfflineStatusBar() {
   return (
     <div className="fixed bottom-3 left-3 z-50 flex flex-col gap-2 no-print" dir="rtl">
       {visibleFailures.length > 0 && (
-        <div className="max-w-xs rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs shadow-lg backdrop-blur">
+        <div className="max-w-sm rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs shadow-lg backdrop-blur">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="font-medium text-destructive mb-1">
                 تعذّرت مزامنة {visibleFailures.length} عملية
               </p>
-              <ul className="space-y-1.5 text-muted-foreground">
-                {visibleFailures.slice(0, 3).map((f) => {
+              <ul className="space-y-1.5 text-muted-foreground max-h-56 overflow-y-auto pl-1">
+                {visibleFailures.map((f) => {
                   const isRetrying = retryingIds.has(f.id);
                   return (
                     <li key={f.id} className="flex items-center justify-between gap-2">
-                      <span>
+                      <span className="truncate" title={`${f.label}: ${f.error}`}>
                         {f.label}: {f.error}
                       </span>
-                      <button
-                        aria-label="إعادة المحاولة"
-                        disabled={isRetrying}
-                        onClick={() => handleRetry(f.id)}
-                        className="flex items-center gap-1 flex-shrink-0 text-primary hover:text-primary/80 disabled:opacity-50"
-                      >
-                        <RotateCcw className={"w-3 h-3" + (isRetrying ? " animate-spin" : "")} />
-                        إعادة المحاولة
-                      </button>
+                      <span className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          aria-label="إعادة المحاولة"
+                          disabled={isRetrying}
+                          onClick={() => handleRetry(f.id)}
+                          className="flex items-center gap-1 text-primary hover:text-primary/80 disabled:opacity-50"
+                        >
+                          <RotateCcw className={"w-3 h-3" + (isRetrying ? " animate-spin" : "")} />
+                          إعادة المحاولة
+                        </button>
+                        <button
+                          aria-label="إخفاء هذه العملية"
+                          onClick={() => setDismissedFailures(new Set([...dismissedFailures, f.id]))}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     </li>
                   );
                 })}
               </ul>
             </div>
             <button
-              aria-label="إخفاء"
+              aria-label="إخفاء الكل"
+              title="إخفاء الكل"
               onClick={() => setDismissedFailures(new Set([...dismissedFailures, ...visibleFailures.map((f) => f.id)]))}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground flex-shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
