@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/useAuth";
 import { Upload, X, UserCog, Loader2, Lock, KeyRound, Pencil, DatabaseBackup, Download } from "lucide-react";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const OFFICE_KEY = ["/api/settings/office"];
 
@@ -411,8 +412,7 @@ function BackupRestoreSection() {
 
   if (!isOwner) return null;
 
-  const fmtDT = (s: string) =>
-    new Date(s).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const fmtDT = (s: string) => formatDateTime(s);
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -559,8 +559,7 @@ function SubAccountsSection() {
 
   if (me?.role !== "owner" && me?.role !== "provider") return null;
 
-  const fmtDate = (s: string | null) =>
-    s ? new Date(s).toLocaleDateString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric" }) : null;
+  const fmtDate = (s: string | null) => (s ? formatDate(s) : null);
 
   return (
     <div className="mt-8">

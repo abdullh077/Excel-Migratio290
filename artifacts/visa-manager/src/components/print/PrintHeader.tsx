@@ -60,7 +60,11 @@ export function PrintHeader({
 /** Unified print footer — repeats on every printed page via `.print-repeat-header`'s <tfoot>. */
 export function PrintFooter({ office, fallbackName = "المكتب" }: { office: PrintOffice | null | undefined; fallbackName?: string }) {
   const now = new Date();
-  const stamp = now.toLocaleDateString("ar-SA-u-nu-latn") + " " + now.toLocaleTimeString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit" });
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  // Plain numeric DD/MM/YYYY HH:mm with Western digits — no Intl/locale
+  // formatting here, since ar-* locales can still inject Arabic-Indic
+  // digits or RTL-mark characters depending on options.
+  const stamp = `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
   return (
     <div className="flex items-center justify-between gap-3 border-t border-gray-300 pt-2 mt-3 text-[10px] text-gray-400">
       <span>{office?.officeName || fallbackName} — نظام عبور الذكي</span>

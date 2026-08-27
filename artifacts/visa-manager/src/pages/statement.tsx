@@ -316,14 +316,14 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
   return (
     <div
       className={
-        compact ? "overflow-x-auto" : "overflow-x-auto rounded-md border-2"
+        compact ? "w-full overflow-x-auto" : "w-full overflow-x-auto rounded-md border-2"
       }
       style={compact ? undefined : { borderColor: navy }}
     >
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full table-auto text-sm border-collapse">
         <thead>
           <tr
-            className="text-white whitespace-nowrap"
+            className="text-white"
             style={{ background: navy }}
           >
             {[
@@ -345,7 +345,7 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
           </tr>
         </thead>
         <tbody>
-          <tr className="whitespace-nowrap bg-[hsl(43,65%,52%)]/10">
+          <tr className="bg-[hsl(43,65%,52%)]/10">
             <td className="px-3 py-2 border border-border font-semibold">
               الرصيد الافتتاحي
             </td>
@@ -363,7 +363,7 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
           </tr>
           {rows.length ? (
             rows.map((r: any) => (
-              <tr key={r.ref} className="whitespace-nowrap odd:bg-muted/20">
+              <tr key={r.ref} className="odd:bg-muted/20">
                 <td className="px-3 py-2 border border-border">{r.kind}</td>
                 <td className="px-3 py-2 border border-border">{La(r.date)}</td>
                 <td className="px-3 py-2 border border-border whitespace-normal min-w-48">
@@ -391,7 +391,7 @@ function LedgerTable({ ledger, compact }: { ledger: any; compact?: boolean }) {
             </tr>
           )}
           <tr
-            className="whitespace-nowrap font-bold"
+            className="font-bold"
             style={{ background: "hsl(43,65%,52%,0.25)" }}
           >
             <td

@@ -31,17 +31,25 @@ export function daysRemaining(entryDate: string | null | undefined, stayDuration
   return stayDuration - elapsed;
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// Plain numeric DD/MM/YYYY with Western (0-9) digits, built manually rather
+// than via Intl/toLocaleDateString: any ar-* locale (including the
+// nu-latn/ca-gregory variants) still injects invisible RTL-mark characters
+// and can fall back to Arabic month names or Arabic-Indic digits depending
+// on the options passed, which is exactly what this app must never show.
 export function formatDate(s: string | null | undefined): string {
   const d = parseDate(s);
   if (!d) return s ?? "—";
-  // Gregorian calendar explicitly — plain ar-SA defaults to the Hijri calendar.
-  return d.toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
 export function formatDateTime(s: string | null | undefined): string {
   const d = parseDate(s);
   if (!d) return s ?? "—";
-  return d.toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "short", day: "numeric" });
+  return `${formatDate(s)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 export function today(): string {

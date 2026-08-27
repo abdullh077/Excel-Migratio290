@@ -18,17 +18,16 @@ export function nt(e: number | null | undefined): string {
       });
 }
 
-// Exact date formatter as production `La`
+// Exact date formatter as production `La`. Plain numeric DD/MM/YYYY with
+// Western digits and no Arabic month name — built manually (not via Intl)
+// so nothing here can regress back to Arabic-Indic digits or RTL marks.
 export function La(e: string | null | undefined): string {
   if (!e) return "-";
   try {
     const t = new Date(e);
     if (isNaN(t.getTime())) return e;
-    return t.toLocaleDateString("ar-SA-u-ca-gregory", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    return `${pad2(t.getDate())}/${pad2(t.getMonth() + 1)}/${t.getFullYear()}`;
   } catch {
     return e;
   }

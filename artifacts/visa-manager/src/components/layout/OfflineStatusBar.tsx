@@ -6,6 +6,7 @@ import { useSyncExternalStore, useState } from "react";
 import { WifiOff, Wifi, RefreshCw, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { getSyncStatus, subscribeSyncStatus } from "@/lib/offline/net";
 import { retryOutboxRecord } from "@/lib/offline/outbox";
+import { formatDate } from "@/lib/utils";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "لم تتم المزامنة بعد";
@@ -15,7 +16,7 @@ function timeAgo(iso: string | null): string {
   if (mins < 60) return `قبل ${mins} دقيقة`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `قبل ${hours} ساعة`;
-  return new Date(iso).toLocaleDateString("ar-SA-u-ca-gregory");
+  return formatDate(iso);
 }
 
 export function OfflineStatusBar() {

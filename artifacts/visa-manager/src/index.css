@@ -302,8 +302,8 @@
 
 /* Print styles */
 @page {
-  size: A4;
-  margin: 10mm 8mm;
+  size: A4 portrait;
+  margin: 12mm;
 }
 
 @media print {
@@ -417,10 +417,10 @@
   }
 }
 @media print {
-  /* إعدادات كشف الحساب - A4 */
+  /* إعدادات كشف الحساب والإشعارات - A4 */
   @page statement-page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 12mm;
   }
   .statement-print-area {
     page: statement-page;
@@ -449,6 +449,13 @@
     word-break: break-word !important;
   }
 
+  /* Table headers repeat at the top of every page a multi-page statement flows onto. */
+  .statement-print-area table thead,
+  .voucher-print-area table thead {
+    display: table-header-group !important;
+  }
+
+  /* Never split a row across two printed pages. */
   .statement-print-area tr,
   .voucher-print-area tr {
     break-inside: avoid !important;

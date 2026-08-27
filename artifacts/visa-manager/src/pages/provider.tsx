@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Plus, Trash2, Key, User, Calendar, Download, DatabaseBackup, RefreshCw, Building2, History, Upload } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/useAuth";
 
@@ -455,9 +455,7 @@ export default function ProviderPage() {
                       {backups.map((b: { id: number; name: string; kind?: string; size?: number; createdAt?: string }) => (
                         <tr key={b.id}>
                           <td className="px-3 py-2">
-                            {b.createdAt
-                              ? new Date(b.createdAt).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
-                              : "—"}
+                            {b.createdAt ? formatDateTime(b.createdAt) : "—"}
                           </td>
                           <td className="px-3 py-2 text-xs">
                             {b.kind === "auto" ? "تلقائية (يومية)" : "يدوية"}
@@ -515,7 +513,7 @@ export default function ProviderPage() {
                   <p>
                     {restoreTarget?.createdAt
                       ? <>سيتم استبدال جميع البيانات الحالية ببيانات النسخة المؤرَّخة في{" "}
-                          <span className="font-medium">{new Date(restoreTarget.createdAt).toLocaleString("ar-SA-u-ca-gregory", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>.
+                          <span className="font-medium">{formatDateTime(restoreTarget.createdAt)}</span>.
                         </>
                       : <>سيتم استبدال جميع البيانات الحالية ببيانات الملف <span className="font-medium" dir="ltr">{uploadName}</span>.</>}
                   </p>
