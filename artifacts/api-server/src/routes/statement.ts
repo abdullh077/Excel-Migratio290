@@ -32,6 +32,27 @@ const AgentEditBody = z.object({
   openingBalance: moneyNumber.optional(),
 });
 
+const AgentCreateBody = AgentEditBody.extend({
+  clientRequestId: z.string().trim().optional(),
+});
+
+const ClientCreateBody = z.object({
+  clientName: z.string().trim().min(1),
+  phone: z.string().trim().nullish(),
+  notes: z.string().trim().nullish(),
+  clientRequestId: z.string().trim().optional(),
+});
+
+function normalizeRequestId(raw: unknown): string | null {
+  // Empty offline-outbox ids must not share the unique key (would otherwise
+  // dedup to the first-ever record and block all subsequent creates).
+  return typeof raw === "string" && raw.trim() !== "" ? raw : null;
+}
+
+function agentResponse(row: typeof agentsTable.$inferSelect, bal: { totalPurchases: number; transferred: number; paidFrom: number; paidTo: number; balance: number; txCount: number }) {
+  return { id: row.id, name: row.name, phone: row.phone, notes: row.notes, openingBalance: Number(row.openingBalance) || 0, ...bal, createdAt: row.createdAt.toISOString() };
+}
+
 const ClientEditBody = z.object({
   oldName: z.string().trim().min(1),
   newName: z.string().trim().min(2, "اسم العميل يجب أن يتكون من حرفين على الأقل"),
@@ -134,9 +155,10 @@ router.get("/statement/agents", async (req, res): Promise<void> => {
 });
 
 router.post("/statement/agents", async (req, res): Promise<void> => {
-  const parsed = AgentEditBody.safeParse(req.body);
+  const parsed = AgentCreateBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const officeId = req.session.officeId!;
+  const clientRequestId = normalizeRequestId(parsed.data.clientRequestId);
   const row = await db.transaction(async (tx) => {
     await lockAccountNames(tx, officeId, [{ scope: "agent", name: parsed.data.name }]);
     if (await resolveRenamedAccountName(tx, officeId, "agent", parsed.data.name) !== parsed.data.name) return null;
@@ -149,9 +171,25 @@ router.post("/statement/agents", async (req, res): Promise<void> => {
       phone: parsed.data.phone ?? null,
       notes: parsed.data.notes ?? null,
       openingBalance: String(parsed.data.openingBalance ?? 0),
-    }).returning())[0];
+      clientRequestId,
+    }).onConflictDoNothing().returning())[0] ?? null;
   });
-  if (!row) { res.status(409).json({ error: "يوجد وكيل بهذا الاسم مسبقاً" }); return; }
+  if (!row) {
+    // A retried offline create can hit either the name-uniqueness check or the
+    // clientRequestId unique index above — in both cases, if this exact
+    // request already succeeded, return the existing record instead of a
+    // permanent conflict so the outbox never reports a false sync failure.
+    if (clientRequestId) {
+      const [existing] = await db.select().from(agentsTable)
+        .where(and(eq(agentsTable.userId, officeId), eq(agentsTable.clientRequestId, clientRequestId)));
+      if (existing) {
+        const bal = await computeAgentBalance(officeId, existing.id, existing.name, Number(existing.openingBalance) || 0);
+        res.status(201).json(agentResponse(existing, bal));
+        return;
+      }
+    }
+    res.status(409).json({ error: "يوجد وكيل بهذا الاسم مسبقاً" }); return;
+  }
   res.status(201).json({ id: row.id, name: row.name, phone: row.phone, notes: row.notes, openingBalance: Number(row.openingBalance) || 0, totalPurchases: 0, transferred: 0, paidFrom: 0, paidTo: 0, balance: Number(row.openingBalance) || 0, txCount: 0, createdAt: row.createdAt.toISOString() });
 });
 
@@ -432,12 +470,9 @@ router.delete("/statement/payments/:id", async (req, res): Promise<void> => {
 
 router.post("/statement/clients", async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
-  const body = z.object({
-    clientName: z.string().trim().min(1),
-    phone: z.string().trim().nullish(),
-    notes: z.string().trim().nullish(),
-  }).safeParse(req.body);
+  const body = ClientCreateBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const clientRequestId = normalizeRequestId(body.data.clientRequestId);
 
   const row = await db.transaction(async (tx) => {
     await lockAccountNames(tx, officeId, [{ scope: "client", name: body.data.clientName }]);
@@ -450,9 +485,19 @@ router.post("/statement/clients", async (req, res): Promise<void> => {
       clientName: body.data.clientName,
       phone: body.data.phone ?? null,
       notes: body.data.notes ?? null,
-    }).returning())[0];
+      clientRequestId,
+    }).onConflictDoNothing().returning())[0] ?? null;
   });
-  if (!row) { res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return; }
+  if (!row) {
+    // Same idempotent-retry rationale as the agent create above: a retried
+    // offline create must return the already-created record, not a 409.
+    if (clientRequestId) {
+      const [existing] = await db.select().from(clientAccountsTable)
+        .where(and(eq(clientAccountsTable.userId, officeId), eq(clientAccountsTable.clientRequestId, clientRequestId)));
+      if (existing) { res.status(201).json({ id: existing.id, clientName: existing.clientName, phone: existing.phone, notes: existing.notes }); return; }
+    }
+    res.status(409).json({ error: "يوجد حساب عميل بهذا الاسم مسبقاً" }); return;
+  }
   res.status(201).json({ id: row.id, clientName: row.clientName, phone: row.phone, notes: row.notes });
 });
 

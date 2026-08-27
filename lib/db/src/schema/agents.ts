@@ -14,6 +14,8 @@ export const agentsTable = pgTable("agents", {
   notes: text("notes"),
   // قيد افتتاحي — folded into the agent's statement balance and ledger opening.
   openingBalance: numeric("opening_balance", { precision: 12, scale: 2 }).notNull().default("0"),
+  // Idempotency key for offline-outbox uploads.
+  clientRequestId: text("client_request_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type Agent = typeof agentsTable.$inferSelect;

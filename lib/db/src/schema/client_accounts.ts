@@ -14,6 +14,8 @@ export const clientAccountsTable = pgTable("client_accounts", {
   // client statement before any transactions.
   openingBalance: numeric("opening_balance", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  // Idempotency key for offline-outbox uploads.
+  clientRequestId: text("client_request_id").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
