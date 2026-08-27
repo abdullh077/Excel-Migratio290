@@ -64,6 +64,13 @@ export async function refreshPendingCount(): Promise<void> {
 }
 
 let flushing = false;
+// Set when something (e.g. a retry) asks for a flush while one is already
+// running. A flush in progress has already loaded its snapshot of records,
+// so a record changed mid-flush (like a just-retried failed op) can be
+// missed by that pass; this guarantees one more pass runs immediately after
+// the current one finishes instead of waiting for the next online/interval
+// trigger.
+let rerunRequested = false;
 
 /** Replays queued writes against the real server, in order. Stops (leaving
  * the rest queued) at the first network failure so nothing is skipped.
@@ -71,7 +78,10 @@ let flushing = false;
  * left behind by a different office that previously signed into this
  * device are never touched here. */
 export async function flushOutbox(): Promise<void> {
-  if (flushing) return;
+  if (flushing) {
+    rerunRequested = true;
+    return;
+  }
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   flushing = true;
   patchSyncStatus({ syncing: true });
@@ -161,7 +171,30 @@ export async function flushOutbox(): Promise<void> {
   } finally {
     flushing = false;
     patchSyncStatus({ syncing: false });
+    if (rerunRequested) {
+      rerunRequested = false;
+      void flushOutbox();
+    }
   }
+}
+
+// Lets staff retry a single permanently-failed queued write once whatever
+// caused it is fixed (e.g. a duplicate name freed up). Resets it to
+// "pending" so the next flushOutbox pass picks it up again in its original
+// order; if it fails again, flushOutbox overwrites the same record (same
+// seq/id) in place, so no duplicate failure entry is ever created.
+export async function retryOutboxRecord(id: string): Promise<void> {
+  // Scoped to the currently authenticated office, same as every other
+  // outbox read — never touch a record left behind by a different office
+  // that previously signed into this device (see currentOfficeRecords).
+  const mine = await currentOfficeRecords();
+  const rec = mine.find((r) => r.id === id);
+  if (!rec || rec.status !== "failed") return;
+  rec.status = "pending";
+  rec.error = undefined;
+  await idbPut(STORE_OUTBOX, rec);
+  await refreshPendingCount();
+  await flushOutbox();
 }
 
 export function applyCross(cross: CrossPatch[]): Promise<void> {

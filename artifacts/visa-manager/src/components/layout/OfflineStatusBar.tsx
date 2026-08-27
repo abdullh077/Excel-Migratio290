@@ -3,8 +3,9 @@
 // succeeded, and a clear (dismissible) alert for any write that failed
 // permanently (a real validation error, not just "no network").
 import { useSyncExternalStore, useState } from "react";
-import { WifiOff, Wifi, RefreshCw, AlertTriangle, X } from "lucide-react";
+import { WifiOff, Wifi, RefreshCw, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { getSyncStatus, subscribeSyncStatus } from "@/lib/offline/net";
+import { retryOutboxRecord } from "@/lib/offline/outbox";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "لم تتم المزامنة بعد";
@@ -20,7 +21,21 @@ function timeAgo(iso: string | null): string {
 export function OfflineStatusBar() {
   const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus, getSyncStatus);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const visibleFailures = status.failedOps.filter((f) => !dismissedFailures.has(f.id));
+
+  async function handleRetry(id: string) {
+    setRetryingIds((prev) => new Set([...prev, id]));
+    try {
+      await retryOutboxRecord(id);
+    } finally {
+      setRetryingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
 
   return (
     <div className="fixed bottom-3 left-3 z-50 flex flex-col gap-2 no-print" dir="rtl">
@@ -32,12 +47,26 @@ export function OfflineStatusBar() {
               <p className="font-medium text-destructive mb-1">
                 تعذّرت مزامنة {visibleFailures.length} عملية
               </p>
-              <ul className="space-y-1 text-muted-foreground">
-                {visibleFailures.slice(0, 3).map((f) => (
-                  <li key={f.id}>
-                    {f.label}: {f.error}
-                  </li>
-                ))}
+              <ul className="space-y-1.5 text-muted-foreground">
+                {visibleFailures.slice(0, 3).map((f) => {
+                  const isRetrying = retryingIds.has(f.id);
+                  return (
+                    <li key={f.id} className="flex items-center justify-between gap-2">
+                      <span>
+                        {f.label}: {f.error}
+                      </span>
+                      <button
+                        aria-label="إعادة المحاولة"
+                        disabled={isRetrying}
+                        onClick={() => handleRetry(f.id)}
+                        className="flex items-center gap-1 flex-shrink-0 text-primary hover:text-primary/80 disabled:opacity-50"
+                      >
+                        <RotateCcw className={"w-3 h-3" + (isRetrying ? " animate-spin" : "")} />
+                        إعادة المحاولة
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
             <button
