@@ -26,6 +26,11 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
+// Fixed row height (px) shared by every nav item and the sliding active
+// indicator so its translateY offset lines up exactly (see index.css
+// .oboor-nav-indicator).
+const NAV_ITEM_HEIGHT = 56;
+
 function buildNav(role: string | undefined): NavItem[] {
   const base: NavItem[] = [
     { href: "/", label: "لوحة القيادة", icon: LayoutDashboard },
@@ -123,7 +128,20 @@ function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav className="relative flex-1 overflow-y-auto py-3">
+          {(() => {
+            const activeIndex = nav.findIndex(
+              (item) =>
+                location === item.href ||
+                (item.href !== "/" && location.startsWith(item.href)),
+            );
+            return activeIndex >= 0 ? (
+              <div
+                className="oboor-nav-indicator"
+                style={{ transform: `translateY(${activeIndex * NAV_ITEM_HEIGHT}px)` }}
+              />
+            ) : null;
+          })()}
           {nav.map((item) => {
             const active =
               location === item.href ||
@@ -133,16 +151,17 @@ function Sidebar({
               <Link key={item.href} href={item.href} onClick={onClose}>
                 <div
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors",
+                    "relative z-[1] flex items-center gap-3 pr-6 pl-3 text-sm cursor-pointer transition-colors duration-300",
                     active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                      ? "text-foreground font-semibold"
+                      : "text-sidebar-foreground/70 hover:bg-white/5 hover:text-sidebar-foreground",
                   )}
+                  style={{ height: NAV_ITEM_HEIGHT }}
                 >
                   <Icon
                     className={cn(
-                      "w-4 h-4 flex-shrink-0",
-                      active && "text-sidebar-primary",
+                      "w-[1.15rem] h-[1.15rem] flex-shrink-0 transition-transform duration-300",
+                      active && "text-sidebar-primary scale-110",
                     )}
                   />
                   <span className="flex-1">{item.label}</span>
