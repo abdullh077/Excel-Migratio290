@@ -22,3 +22,5 @@
 - [api-server rebuild 2026-08](api-server-rebuild-2026-08.md) — full rebuild: auth, umrah, visas, dashboard, archive, settings, provider, statement, vouchers routes; dist/ compiled; needs workflow registration to go live in dev.
 - [OpenAPI contract regeneration](openapi-contract-regeneration.md) — update the source spec for every live field before codegen; stale schemas can silently strip valid request fields.
 - [Offline outbox idempotency is generic](offline-outbox-idempotency-generic.md) — client already sends clientRequestId for any endpoint planMutation() marks kind:"create"; new idempotent creates usually need only server-side dedupe.
+- [Offline sync test harness](offline-sync-test-harness.md) — fake-indexeddb + navigator.onLine override needed to unit-test outbox.ts in Node; retry-with-same-clientRequestId is the key balance-integrity check.
+- [DB schema drift: clientRequestId](db-schema-drift-clientrequestid.md) — dev DB can miss a column the Drizzle schema defines; fix with targeted ALTER TABLE, never blind drizzle-kit push (risks dropping the session table).
