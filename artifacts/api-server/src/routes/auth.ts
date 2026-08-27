@@ -7,10 +7,11 @@ import { officeIdOf, normaliseRole } from "../lib/auth.js";
 import { logger } from "../lib/logger.js";
 import { maybeDailyBackup } from "../lib/backup.js";
 import { addMonthsClamped } from "../lib/dates.js";
+import { loginLimiter } from "../lib/rateLimit.js";
 
 const router = Router();
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });

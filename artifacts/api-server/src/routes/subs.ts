@@ -65,7 +65,7 @@ router.patch("/office/subs/:id/password", async (req, res): Promise<void> => {
   if (!body.success) { res.status(400).json({ error: "كلمة المرور قصيرة جداً (4 أحرف على الأقل)" }); return; }
   const sub = await ownSub(req, Number(req.params.id));
   if (!sub) { res.status(404).json({ error: "Not found" }); return; }
-  const passwordHash = await bcrypt.hash(body.data.password, 10);
+  const passwordHash = await bcrypt.hash(body.data.password, 12);
   const [updated] = await db.update(usersTable)
     .set({ passwordHash, failedAttempts: 0, lockedUntil: null, credentialsChangedAt: new Date() })
     .where(eq(usersTable.id, sub.id)).returning();
@@ -129,7 +129,7 @@ router.patch("/office/credentials", async (req, res): Promise<void> => {
   }
   const updates: Record<string, unknown> = { credentialsChangedAt: new Date() };
   if (body.data.username) updates.username = body.data.username;
-  if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 10);
+  if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 12);
   const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, me.id)).returning();
   res.json({ username: updated.username, credentialsChangedAt: updated.credentialsChangedAt?.toISOString() ?? null });
 });

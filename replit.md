@@ -42,11 +42,11 @@
 - **إشعار العميل** — printable/PDF receipt page
 - **إدارة المستخدمين** — admin-only: create/delete system users
 
-## Default credentials
+## Initial account
 
-- Username: `admin`
-- Password: `admin123`
-- Change this after first login via Settings → إضافة مستخدم جديد
+- There is no seeded/default account in code — the first provider account must be created directly in the database (or by the platform operator) with a strong, unique password.
+- Do not reuse a documented or guessable password (e.g. `admin123`) for the initial account; it is the highest-privilege role in the system.
+- Additional users are created afterwards via Settings → إضافة مستخدم جديد.
 
 ## User preferences
 

@@ -157,4 +157,13 @@ overrides:
   "@expo/ngrok-bin>@expo/ngrok-bin-win32-x64": "-"
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
-  esbuild: "0.27.3"
+  esbuild: "0.28.1"
+  # Security patches for transitive dev-tool dependencies (vite/postcss/orval/vite-plugin-pwa
+  # chains) flagged by dependency audit. Range-scoped so unrelated major lines (e.g. the
+  # brace-expansion 2.x pulled in by an older minimatch) are left alone.
+  "brace-expansion@^5.0.0": "^5.0.9"
+  "fast-uri": "^3.1.5"
+  "js-yaml": "^4.3.1"
+  "linkify-it": "^5.0.2"
+  "postcss": "^8.5.23"
+  "nanoid@^3.0.0": "^3.3.18"

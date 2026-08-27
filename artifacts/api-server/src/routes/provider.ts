@@ -100,7 +100,7 @@ router.patch("/provider/credentials", async (req, res): Promise<void> => {
     lockedUntil: null,
   };
   if (username) updates.username = username;
-  if (parsed.data.password) updates.passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  if (parsed.data.password) updates.passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
   const [updated] = await db.update(usersTable)
     .set(updates)
@@ -152,7 +152,7 @@ router.post("/provider/accounts", async (req, res): Promise<void> => {
     const parent = await getManagedAccount(parentUserId);
     if (!parent || parent.role !== "owner") { res.status(400).json({ error: "الحساب الرئيسي غير صالح" }); return; }
   }
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
 
   const [user] = await db.insert(usersTable).values({
     username,
@@ -212,7 +212,7 @@ router.patch("/provider/accounts/:id/password", async (req, res): Promise<void> 
   const target = await getManagedAccount(params.data.id);
   if (!target) { res.status(404).json({ error: "Not found" }); return; }
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   await db.update(usersTable).set({ passwordHash, failedAttempts: 0, lockedUntil: null, credentialsChangedAt: new Date() }).where(eq(usersTable.id, target.id));
   res.json({ message: "Password updated" });
 });
@@ -249,7 +249,7 @@ router.post("/provider/owners", async (req, res): Promise<void> => {
   if (!(await usernameIsAvailable(username))) { res.status(409).json({ error: "اسم المستخدم مستخدم مسبقاً" }); return; }
   const expiry = parseOptionalDate(expiresAt);
   if (expiry === "invalid") { res.status(400).json({ error: "تاريخ الانتهاء غير صحيح" }); return; }
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
   // Month-based subscriptions do NOT start at creation: the countdown begins
   // at the owner's first login (pendingMonths → expiresAt in auth/login).
   // A custom explicit date stays fixed as given.
@@ -350,7 +350,7 @@ router.post("/provider/subs", async (req, res): Promise<void> => {
   if (!parent) { res.status(404).json({ error: "Parent office not found" }); return; }
   if (parent.role !== "owner") { res.status(400).json({ error: "Parent must be an owner account" }); return; }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
   const [user] = await db.insert(usersTable).values({
     username,
     passwordHash,
