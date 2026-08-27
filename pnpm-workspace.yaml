@@ -167,3 +167,6 @@ overrides:
   "linkify-it": "^5.0.2"
   "postcss": "^8.5.23"
   "nanoid@^3.0.0": "^3.3.18"
+  # exceljs (visa-manager Excel export) pulls in uuid@8.3.2, which has a missing
+  # buffer bounds check in v3/v5/v6 (GHSA-w5hq-g745-h8pq). Bump to the patched line.
+  "exceljs>uuid": "^11.1.1"

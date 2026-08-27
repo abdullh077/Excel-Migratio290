@@ -45,7 +45,7 @@ import {
   Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { PrintHeader, PrintFooter, PrintWatermark } from "@/components/print/PrintHeader";
 import { offlineFetch } from "@/lib/offline/offlineFetch";
 
@@ -308,7 +308,7 @@ function BalanceBadge({ balance }: { balance: number }) {
 }
 
 // Export ledger statement to an RTL xlsx file (same columns as LedgerTable, with opening row and totals)
-function exportLedgerXlsx(
+async function exportLedgerXlsx(
   ledger: any,
   agentName: string,
   from?: string,
@@ -377,21 +377,34 @@ function exportLedgerXlsx(
     from || to
       ? `خلال الفترة من ${from ? La(from) : "البداية"} إلى ${to ? La(to) : "اليوم"}`
       : "عن كامل الفترة حتى تاريخه";
-  const ws = XLSX.utils.aoa_to_sheet([[title], [period], [], header, ...rows]);
-  ws["!cols"] = [
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 45 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 22 },
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("كشف الحساب", { views: [{ rightToLeft: true }] });
+  ws.columns = [
+    { width: 16 },
+    { width: 18 },
+    { width: 45 },
+    { width: 14 },
+    { width: 14 },
+    { width: 22 },
   ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب");
-  if (!wb.Workbook) wb.Workbook = {};
-  if (!wb.Workbook.Views) wb.Workbook.Views = [];
-  wb.Workbook.Views[0] = { RTL: true };
-  XLSX.writeFile(wb, `كشف حساب - ${agentName}.xlsx`);
+  ws.addRow([title]);
+  ws.addRow([period]);
+  ws.addRow([]);
+  ws.addRow(header);
+  for (const r of rows) ws.addRow(r);
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `كشف حساب - ${agentName}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // Ledger-style detailed statement table (كشف حساب تفصيلي بنمط دفتر الأستاذ)
