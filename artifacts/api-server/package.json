@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:pg --external:pg-native --external:drizzle-orm --external:express --external:express-session --external:connect-pg-simple --external:bcryptjs --external:pino --external:pino-http --external:zod --outfile=dist/index.mjs",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:pg --external:pg-native --external:drizzle-orm --external:express --external:express-session --external:connect-pg-simple --external:bcryptjs --external:pino --external:pino-http --external:zod --external:helmet --external:cors --external:express-rate-limit --outfile=dist/index.mjs",
     "start": "node dist/index.mjs",
     "test": "tsx --test src/lib/clientAccounts.concurrency.test.ts src/routes/statement.offline-sync.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
