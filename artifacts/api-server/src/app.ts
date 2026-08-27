@@ -27,26 +27,36 @@ app.use(
 );
 
 // Explicit CORS policy. The frontend always calls this API same-origin
-// (relative /api/... paths through the artifact proxy), so browser requests
-// with no Origin header — same-origin fetches, curl, mobile clients — are
-// always allowed. Cross-origin browser requests are rejected unless their
-// exact origin is listed in ALLOWED_ORIGINS (comma-separated env var, unset
-// by default). This makes the "no cross-origin access" posture an explicit,
-// auditable policy instead of an accidental side effect of omitting `cors`.
+// (relative /api/... paths through the artifact proxy). Browsers do send an
+// Origin header on same-origin POST/PUT/DELETE requests (it's only GET/HEAD
+// that omit it), so "no Origin header" cannot be the same-origin test — it
+// must be a true origin/host comparison. Requests with no Origin header
+// (curl, native/mobile HTTP clients) or whose Origin host matches the
+// request's own Host header are always allowed. Cross-origin browser
+// requests are rejected unless their exact origin is listed in
+// ALLOWED_ORIGINS (comma-separated env var, unset by default). This makes
+// the "no cross-origin access" posture an explicit, auditable policy instead
+// of an accidental side effect of omitting `cors`.
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
+  cors((req, callback) => {
+    const origin = req.headers.origin;
+    let sameOrigin = false;
+    if (origin) {
+      try {
+        sameOrigin = new URL(origin).host === req.headers.host;
+      } catch {
+        sameOrigin = false;
       }
-      callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
+    }
+    if (!origin || sameOrigin || allowedOrigins.includes(origin)) {
+      callback(null, { credentials: true });
+      return;
+    }
+    callback(new Error("Not allowed by CORS"));
   })
 );
 
