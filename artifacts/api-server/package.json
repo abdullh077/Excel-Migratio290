@@ -15,6 +15,7 @@
     "@workspace/db": "workspace:*",
     "bcryptjs": "^2.4.3",
     "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
     "express": "^5.1.0",
     "express-rate-limit": "^8.6.2",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/connect-pg-simple": "^7.0.3",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.0",
     "@types/node": "catalog:",

@@ -26,4 +26,5 @@
 - [DB schema drift: clientRequestId](db-schema-drift-clientrequestid.md) — dev DB can miss a column the Drizzle schema defines; fix with targeted ALTER TABLE, never blind drizzle-kit push (risks dropping the session table).
 - [Testing OfflineStatusBar visually](offline-statusbar-manual-test.md) — App.tsx's startup refreshPendingCount()/flushOutbox() calls overwrite any seeded net.ts failedOps; comment both out (with a `void x;` no-op to silence unused-import lint) to screenshot-test the failed-sync panel, then revert.
 - [Dependency audit triage](dependency-audit-triage.md) — run `pnpm why -r <pkg>` first: dev-tool-only transitive findings are low-urgency batch-fix-via-overrides, not production risk.
+- [Audit logging pattern](audit-logging-pattern.md) — one generic res.on("finish") middleware covers ~95% of CRUD mutations; hand-instrument only routes whose outcome method+path can't distinguish (e.g. login).
 - [xlsx security replacement](xlsx-security-replacement.md) — xlsx's 2 high CVEs have no upstream fix; swap to exceljs, then re-audit since exceljs itself pulls a vulnerable transitive uuid.

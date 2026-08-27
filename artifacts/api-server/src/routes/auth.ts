@@ -8,6 +8,7 @@ import { logger } from "../lib/logger.js";
 import { maybeDailyBackup } from "../lib/backup.js";
 import { addMonthsClamped } from "../lib/dates.js";
 import { loginLimiter } from "../lib/rateLimit.js";
+import { logAudit } from "../lib/audit.js";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.username, username));
   if (!user) {
+    logAudit({ action: "login_failed_unknown_user", username, method: "POST", path: "/api/auth/login", statusCode: 401, ip: req.ip ?? null });
     res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     return;
   }
@@ -28,6 +30,7 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
   // Lockout check
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    logAudit({ action: "login_blocked_locked", username, actorUserId: user.id, method: "POST", path: "/api/auth/login", statusCode: 401, ip: req.ip ?? null });
     res.status(401).json({ error: `الحساب مقفل مؤقتاً. حاول بعد ${mins} دقيقة` });
     return;
   }
@@ -37,12 +40,14 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
     const attempts = (user.failedAttempts ?? 0) + 1;
     const lockedUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
     await db.update(usersTable).set({ failedAttempts: attempts, lockedUntil }).where(eq(usersTable.id, user.id));
+    logAudit({ action: "login_failed_bad_password", username, actorUserId: user.id, method: "POST", path: "/api/auth/login", statusCode: 401, ip: req.ip ?? null });
     res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     return;
   }
 
   // Owner-controlled lock on sub accounts
   if (user.disabled) {
+    logAudit({ action: "login_blocked_disabled", username, actorUserId: user.id, method: "POST", path: "/api/auth/login", statusCode: 403, ip: req.ip ?? null });
     res.status(403).json({ error: "تم إيقاف هذا الحساب من قبل مدير المكتب" });
     return;
   }
@@ -90,6 +95,7 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
     req.session.officeId = officeId;
     req.session.role = role;
     req.session.save(() => {
+      logAudit({ action: "login_success", username: user.username, actorUserId: user.id, officeId, method: "POST", path: "/api/auth/login", statusCode: 200, ip: req.ip ?? null });
       res.json({ id: user.id, username: user.username, role, officeId, expiresAt: user.expiresAt ?? null });
       // Lazy daily backup — fire and forget, never blocks the login response.
       void maybeDailyBackup();
@@ -98,7 +104,9 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", (req, res): void => {
+  const { userId, officeId } = req.session;
   req.session.destroy(() => {
+    logAudit({ action: "logout", actorUserId: userId ?? null, officeId: officeId ?? null, method: "POST", path: "/api/auth/logout", statusCode: 200, ip: req.ip ?? null });
     res.json({ message: "Logged out" });
   });
 });

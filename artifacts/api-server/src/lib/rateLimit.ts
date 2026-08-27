@@ -25,3 +25,15 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   message: { error: "عدد كبير من محاولات الدخول، الرجاء المحاولة لاحقاً" },
 });
+
+// IP-based throttle for other sensitive, low-frequency-by-nature endpoints:
+// full data backup downloads/restores and credential changes. A legitimate
+// office never needs more than a handful of these in 15 minutes; scripted
+// scraping or credential-stuffing against them does.
+export const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "عدد كبير من الطلبات الحساسة، الرجاء المحاولة لاحقاً" },
+});

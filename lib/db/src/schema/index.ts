@@ -9,3 +9,4 @@ export * from "./vouchers";
 export * from "./client_accounts";
 export * from "./account_name_aliases";
 export * from "./backups";
+export * from "./audit_logs";

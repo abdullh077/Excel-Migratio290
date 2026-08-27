@@ -6,10 +6,11 @@ import {
   umrahClientsTable, otherVisasTable, agentsTable, agentPaymentsTable,
   ledgerEntriesTable, vouchersTable, clientAccountsTable,
 } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { requireOwner } from "../lib/auth.js";
 import { restoreOfficeFromPayload, assertOfficePayload, createBackup } from "../lib/backup.js";
 import { backupsTable } from "@workspace/db";
+import { sensitiveLimiter } from "../lib/rateLimit.js";
 
 // Owner-facing management of the office's own sub accounts + office backup.
 const router = Router();
@@ -25,11 +26,14 @@ function toSub(u: typeof usersTable.$inferSelect) {
   };
 }
 
-// Fetch a sub account and verify it belongs to the session's office.
+// Fetch a sub account and verify it belongs to the session's office. The
+// ownership predicate is in the WHERE clause itself (not a post-fetch check)
+// so a mistyped id can never even read another office's account row.
 async function ownSub(req: any, id: number) {
   if (!Number.isInteger(id)) return null;
-  const [sub] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-  if (!sub || sub.role !== "sub" || sub.parentUserId !== req.session.officeId) return null;
+  const [sub] = await db.select().from(usersTable)
+    .where(and(eq(usersTable.id, id), eq(usersTable.parentUserId, req.session.officeId)));
+  if (!sub || sub.role !== "sub") return null;
   return sub;
 }
 
@@ -60,7 +64,7 @@ router.patch("/office/subs/:id/username", async (req, res): Promise<void> => {
   res.json(toSub(updated));
 });
 
-router.patch("/office/subs/:id/password", async (req, res): Promise<void> => {
+router.patch("/office/subs/:id/password", sensitiveLimiter, async (req, res): Promise<void> => {
   const body = z.object({ password: z.string().min(4) }).safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: "كلمة المرور قصيرة جداً (4 أحرف على الأقل)" }); return; }
   const sub = await ownSub(req, Number(req.params.id));
@@ -74,7 +78,7 @@ router.patch("/office/subs/:id/password", async (req, res): Promise<void> => {
 
 // Office-scoped backup download: only this office's data.
 // Used by the client to automatically save a daily copy on each device.
-router.get("/office/backup", async (req, res): Promise<void> => {
+router.get("/office/backup", sensitiveLimiter, async (req, res): Promise<void> => {
   const officeId = req.session.officeId!;
   const [settings, umrah, visas, agents, agentPayments, ledger, vouchers, clientAccounts] = await Promise.all([
     db.select().from(officeSettingsTable).where(eq(officeSettingsTable.userId, officeId)),
@@ -108,7 +112,7 @@ router.get("/office/backups", async (_req, res): Promise<void> => {
 });
 
 // Owner changes their OWN username/password (requires current password).
-router.patch("/office/credentials", async (req, res): Promise<void> => {
+router.patch("/office/credentials", sensitiveLimiter, async (req, res): Promise<void> => {
   if (!requireStrictOwner(req, res)) return;
   const body = z.object({
     currentPassword: z.string().min(1),
@@ -146,7 +150,7 @@ function requireStrictOwner(req: any, res: any): boolean {
 
 // Restore THIS office's data from a stored server snapshot.
 // Payload is validated BEFORE the safety snapshot, then only this office's rows change.
-router.post("/office/backups/:id/restore", async (req, res): Promise<void> => {
+router.post("/office/backups/:id/restore", sensitiveLimiter, async (req, res): Promise<void> => {
   if (!requireStrictOwner(req, res)) return;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -164,7 +168,7 @@ router.post("/office/backups/:id/restore", async (req, res): Promise<void> => {
 
 // Restore THIS office's data from an uploaded backup file
 // (either an office file saved on the device, or a full server file).
-router.post("/office/restore-upload", async (req, res): Promise<void> => {
+router.post("/office/restore-upload", sensitiveLimiter, async (req, res): Promise<void> => {
   if (!requireStrictOwner(req, res)) return;
   const payload = req.body?.payload ?? req.body;
   try {
