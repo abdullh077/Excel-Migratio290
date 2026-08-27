@@ -315,21 +315,45 @@
   .voucher-print,
   .voucher-print .overflow-x-auto,
   .voucher-print .overflow-hidden,
+  .statement-print-area,
+  .statement-print-area .overflow-x-auto,
+  .statement-print-area .overflow-hidden,
   .overflow-x-auto {
     overflow: visible !important;
   }
 
-  /* Dialogs that host printables must expand to full height */
+  /* Dialogs that host printables must print as a normal flowing page, not a
+     floating centered box — release them from the fixed/centered/backdrop
+     layout used on screen (this is also what was leaking as a "screenshot
+     with a close (X) mark" in printed output: the dialog chrome itself was
+     printing along with its content). */
   [role='dialog'] {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
     max-height: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
     overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
   }
 
-  /* Repeating office header on every printed page (print-repeat-header wraps content in a table) */
+  /* Repeating office header/footer on every printed page (print-repeat-header
+     wraps content in a table: thead repeats as the header, tfoot repeats as
+     the footer, on every page the content overflows onto). */
   .print-repeat-header > thead {
     display: table-header-group;
   }
+  .print-repeat-header > tfoot {
+    display: table-footer-group;
+  }
   .print-repeat-header > thead > tr > td,
+  .print-repeat-header > tfoot > tr > td,
   .print-repeat-header > tbody > tr > td {
     border: none !important;
     padding: 0 !important;
@@ -341,7 +365,9 @@
   }
 
   .voucher-print,
-  .voucher-print * {
+  .voucher-print *,
+  .statement-print-area,
+  .statement-print-area * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

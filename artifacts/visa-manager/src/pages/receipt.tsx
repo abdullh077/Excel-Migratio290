@@ -84,7 +84,7 @@ export default function ReceiptPage() {
   return (
     <div
       dir="rtl"
-      className="voucher-print-area min-h-screen bg-gray-100 font-sans"
+      className="voucher-print statement-print-area min-h-screen bg-gray-100 font-sans"
     >
       {/* Print controls — hidden in print */}
       <div className="print:hidden sticky top-0 z-10 flex items-center justify-between gap-2 bg-white border-b px-4 py-3">
@@ -121,19 +121,36 @@ export default function ReceiptPage() {
               />
             </div>
           )}
-          <div className="relative">
-            {/* Header — unified across all printable documents */}
-            <div className="mb-6">
-              <PrintHeader
-                office={{ ...office, officeName, officePhone: supportPhone }}
-                fallbackName={OFFICE_FALLBACK}
-                details={[
-                  { label: "رقم السند", value: receiptId },
-                  { label: "التاريخ", value: formatDate(record.createdAt) },
-                ]}
-              />
-            </div>
-
+          <table className="relative w-full print-repeat-header">
+            <thead>
+              <tr>
+                <td className="pb-6">
+                  {/* Header — unified across all printable documents */}
+                  <PrintHeader
+                    office={{ ...office, officeName, officePhone: supportPhone }}
+                    fallbackName={OFFICE_FALLBACK}
+                    details={[
+                      { label: "رقم السند", value: receiptId },
+                      { label: "التاريخ", value: formatDate(record.createdAt) },
+                    ]}
+                  />
+                </td>
+              </tr>
+            </thead>
+            <tfoot>
+              <tr>
+                <td className="pt-4">
+                  {/* Footer */}
+                  <div className="text-center text-xs text-gray-400 border-t pt-4 space-y-1">
+                    <p>نسعد بخدمتكم ونتمنى لكم رحلة موفقة</p>
+                    <p>تمت الطباعة بواسطة نظام عبور الذكي</p>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+            <tbody>
+              <tr>
+                <td>
             {/* Title */}
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-primary">{title}</h2>
@@ -230,13 +247,10 @@ export default function ReceiptPage() {
                 </div>
               </div>
             </div>
-
-            {/* Footer */}
-            <div className="text-center text-xs text-gray-400 border-t pt-4 space-y-1">
-              <p>نسعد بخدمتكم ونتمنى لكم رحلة موفقة</p>
-              <p>تمت الطباعة بواسطة نظام عبور الذكي</p>
-            </div>
-          </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

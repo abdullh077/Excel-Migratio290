@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
-import { PrintHeader, PrintWatermark } from "@/components/print/PrintHeader";
+import { PrintHeader, PrintFooter, PrintWatermark } from "@/components/print/PrintHeader";
 import { offlineFetch } from "@/lib/offline/offlineFetch";
 
 // Exact currency formatter as production `nt`
@@ -999,17 +999,6 @@ export default function StatementPage() {
           </div>
         </div>
 
-        {/* Print-only statement header — unified office header */}
-        <div className="hidden print:block mb-4">
-          <PrintHeader
-            office={office}
-            details={[{ label: "التاريخ", value: La(todayISO()) }]}
-          />
-          <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">
-            كشف الحساب
-          </p>
-        </div>
-
         <Tabs defaultValue="agents" dir="rtl">
           <TabsList className="mb-4 no-print flex-wrap h-auto">
             <TabsTrigger value="agents">
@@ -1452,77 +1441,107 @@ export default function StatementPage() {
                 </Button>
               )}
             </div>
-            <div className="rounded-lg border border-border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="whitespace-nowrap">
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">النوع</TableHead>
-                    <TableHead className="text-right">الوصف</TableHead>
-                    <TableHead className="text-right">المبلغ</TableHead>
-                    <TableHead className="text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ledgerLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-10">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
-                      </TableCell>
-                    </TableRow>
-                  ) : ledger?.length ? (
-                    ledger.map((ie: any) => (
-                      <TableRow
-                        key={ie.id}
-                        className="whitespace-nowrap hover:bg-muted/30"
-                      >
-                        <TableCell>{La(ie.entryDate)}</TableCell>
-                        <TableCell>
-                          {ie.type === "income" ? (
-                            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-xs">
-                              <ArrowUpCircle className="w-3 h-3 ml-1" /> دخل
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive" className="text-xs">
-                              <ArrowDownCircle className="w-3 h-3 ml-1" /> نفقة
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>{ie.description}</TableCell>
-                        <TableCell className="font-medium">
-                          {nt(Number(ie.amount))}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openLedgerEdit(ie)}
-                            aria-label="تعديل"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() => delLedger.mutate(ie.id)}
-                            aria-label="حذف"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRow
-                      colSpan={5}
-                      icon={TrendingUp}
-                      title="لا توجد قيود بعد"
-                      hint="سجّل النفقات والدخل العام للمكتب هنا"
-                    />
-                  )}
-                </TableBody>
-              </Table>
+            <div className="statement-print-area relative">
+              <table className="w-full print-repeat-header">
+                <thead>
+                  <tr>
+                    <td className="hidden print:table-cell pb-4">
+                      <PrintHeader
+                        office={office}
+                        details={[{ label: "التاريخ", value: La(todayISO()) }]}
+                      />
+                      <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">
+                        كشف الحساب — الدخل والنفقات
+                      </p>
+                    </td>
+                  </tr>
+                </thead>
+                <tfoot>
+                  <tr>
+                    <td className="hidden print:table-cell">
+                      <PrintFooter office={office} />
+                    </td>
+                  </tr>
+                </tfoot>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div className="rounded-lg border border-border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="whitespace-nowrap">
+                              <TableHead className="text-right">التاريخ</TableHead>
+                              <TableHead className="text-right">النوع</TableHead>
+                              <TableHead className="text-right">الوصف</TableHead>
+                              <TableHead className="text-right">المبلغ</TableHead>
+                              <TableHead className="text-right no-print"></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ledgerLoading ? (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center py-10">
+                                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                                </TableCell>
+                              </TableRow>
+                            ) : ledger?.length ? (
+                              ledger.map((ie: any) => (
+                                <TableRow
+                                  key={ie.id}
+                                  className="whitespace-nowrap hover:bg-muted/30"
+                                >
+                                  <TableCell>{La(ie.entryDate)}</TableCell>
+                                  <TableCell>
+                                    {ie.type === "income" ? (
+                                      <Badge className="bg-emerald-600 hover:bg-emerald-600 text-xs">
+                                        <ArrowUpCircle className="w-3 h-3 ml-1" /> دخل
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="destructive" className="text-xs">
+                                        <ArrowDownCircle className="w-3 h-3 ml-1" /> نفقة
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>{ie.description}</TableCell>
+                                  <TableCell className="font-medium">
+                                    {nt(Number(ie.amount))}
+                                  </TableCell>
+                                  <TableCell className="no-print">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => openLedgerEdit(ie)}
+                                      aria-label="تعديل"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="text-destructive"
+                                      onClick={() => delLedger.mutate(ie.id)}
+                                      aria-label="حذف"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <EmptyRow
+                                colSpan={5}
+                                icon={TrendingUp}
+                                title="لا توجد قيود بعد"
+                                hint="سجّل النفقات والدخل العام للمكتب هنا"
+                              />
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </TabsContent>
 
@@ -1533,63 +1552,93 @@ export default function StatementPage() {
                 <Printer className="w-4 h-4 ml-1.5" /> طباعة / PDF
               </Button>
             </div>
-            <div className="rounded-lg border border-border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="whitespace-nowrap">
-                    <TableHead className="text-right">الشهر</TableHead>
-                    <TableHead className="text-right">عدد المعاملات</TableHead>
-                    <TableHead className="text-right">
-                      مبيعات المعاملات
-                    </TableHead>
-                    <TableHead className="text-right">ربح المعاملات</TableHead>
-                    <TableHead className="text-right">دخل آخر</TableHead>
-                    <TableHead className="text-right">النفقات</TableHead>
-                    <TableHead className="text-right">الصافي</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {summaryLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-10">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
-                      </TableCell>
-                    </TableRow>
-                  ) : summary?.length ? (
-                    summary.map((ie: any) => (
-                      <TableRow
-                        key={ie.month}
-                        className="whitespace-nowrap hover:bg-muted/30"
-                      >
-                        <TableCell className="font-medium">
-                          {ie.month}
-                        </TableCell>
-                        <TableCell>{ie.txCount}</TableCell>
-                        <TableCell>{nt(ie.txSales)}</TableCell>
-                        <TableCell className="text-emerald-600">
-                          {nt(ie.txProfit)}
-                        </TableCell>
-                        <TableCell>{nt(ie.otherIncome)}</TableCell>
-                        <TableCell className="text-destructive">
-                          {nt(ie.expenses)}
-                        </TableCell>
-                        <TableCell
-                          className={`font-bold ${ie.net >= 0 ? "text-emerald-600" : "text-destructive"}`}
-                        >
-                          {nt(ie.net)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRow
-                      colSpan={7}
-                      icon={BarChart3}
-                      title="لا توجد بيانات بعد"
-                      hint="الملخص يُبنى تلقائياً من معاملاتك وقيودك"
-                    />
-                  )}
-                </TableBody>
-              </Table>
+            <div className="statement-print-area relative">
+              <table className="w-full print-repeat-header">
+                <thead>
+                  <tr>
+                    <td className="hidden print:table-cell pb-4">
+                      <PrintHeader
+                        office={office}
+                        details={[{ label: "التاريخ", value: La(todayISO()) }]}
+                      />
+                      <p className="text-lg font-bold text-center mt-3 text-[hsl(220,40%,18%)]">
+                        كشف الحساب — الملخص الشهري
+                      </p>
+                    </td>
+                  </tr>
+                </thead>
+                <tfoot>
+                  <tr>
+                    <td className="hidden print:table-cell">
+                      <PrintFooter office={office} />
+                    </td>
+                  </tr>
+                </tfoot>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div className="rounded-lg border border-border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="whitespace-nowrap">
+                              <TableHead className="text-right">الشهر</TableHead>
+                              <TableHead className="text-right">عدد المعاملات</TableHead>
+                              <TableHead className="text-right">
+                                مبيعات المعاملات
+                              </TableHead>
+                              <TableHead className="text-right">ربح المعاملات</TableHead>
+                              <TableHead className="text-right">دخل آخر</TableHead>
+                              <TableHead className="text-right">النفقات</TableHead>
+                              <TableHead className="text-right">الصافي</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {summaryLoading ? (
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center py-10">
+                                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                                </TableCell>
+                              </TableRow>
+                            ) : summary?.length ? (
+                              summary.map((ie: any) => (
+                                <TableRow
+                                  key={ie.month}
+                                  className="whitespace-nowrap hover:bg-muted/30"
+                                >
+                                  <TableCell className="font-medium">
+                                    {ie.month}
+                                  </TableCell>
+                                  <TableCell>{ie.txCount}</TableCell>
+                                  <TableCell>{nt(ie.txSales)}</TableCell>
+                                  <TableCell className="text-emerald-600">
+                                    {nt(ie.txProfit)}
+                                  </TableCell>
+                                  <TableCell>{nt(ie.otherIncome)}</TableCell>
+                                  <TableCell className="text-destructive">
+                                    {nt(ie.expenses)}
+                                  </TableCell>
+                                  <TableCell
+                                    className={`font-bold ${ie.net >= 0 ? "text-emerald-600" : "text-destructive"}`}
+                                  >
+                                    {nt(ie.net)}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <EmptyRow
+                                colSpan={7}
+                                icon={BarChart3}
+                                title="لا توجد بيانات بعد"
+                                hint="الملخص يُبنى تلقائياً من معاملاتك وقيودك"
+                              />
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </TabsContent>
         </Tabs>
@@ -2257,7 +2306,7 @@ export default function StatementPage() {
               </DialogTitle>
             </DialogHeader>
             {detail?.ledger && (
-              <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
+              <div className="voucher-print statement-print-area relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
                 <PrintWatermark logo={office?.officeLogo} />
                 <table className="w-full print-repeat-header relative border-collapse">
                   <thead>
@@ -2273,6 +2322,13 @@ export default function StatementPage() {
                       </td>
                     </tr>
                   </thead>
+                  <tfoot>
+                    <tr>
+                      <td>
+                        <PrintFooter office={office} />
+                      </td>
+                    </tr>
+                  </tfoot>
                   <tbody>
                     <tr>
                       <td>
@@ -2572,7 +2628,7 @@ export default function StatementPage() {
               </DialogTitle>
             </DialogHeader>
             {clientDetail?.ledger && (
-              <div className="voucher-print relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
+              <div className="voucher-print statement-print-area relative overflow-hidden p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white text-black">
                 <PrintWatermark logo={office?.officeLogo} />
                 <table className="w-full print-repeat-header relative border-collapse">
                   <thead>
@@ -2588,6 +2644,13 @@ export default function StatementPage() {
                       </td>
                     </tr>
                   </thead>
+                  <tfoot>
+                    <tr>
+                      <td>
+                        <PrintFooter office={office} />
+                      </td>
+                    </tr>
+                  </tfoot>
                   <tbody>
                     <tr>
                       <td>
@@ -2805,7 +2868,7 @@ export default function StatementPage() {
               </DialogTitle>
             </DialogHeader>
             {printVoucher && (
-              <div className="voucher-print relative overflow-hidden space-y-5 p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white">
+              <div className="voucher-print voucher-print-area relative overflow-hidden space-y-5 p-4 rounded-lg border-2 border-[hsl(220,40%,18%)] bg-white">
                 {/* Watermark — office logo */}
                 <PrintWatermark logo={office?.officeLogo} />
                 <div className="relative space-y-5">
@@ -2882,6 +2945,7 @@ export default function StatementPage() {
                       </p>
                     </div>
                   </div>
+                  <PrintFooter office={office} />
                 </div>
               </div>
             )}
