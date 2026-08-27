@@ -352,9 +352,7 @@ function exportLedgerXlsx(
     rows.push([
       e.kind,
       La(e.date),
-      (e.description || "")
-        .replace("لكم مقابل", "مقابل")
-        .replace("عليكم مقابل", "مقابل"),
+      e.description || "",
       debit || "",
       credit || "",
       balLabel(run),

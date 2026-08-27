@@ -294,15 +294,15 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
     // حساب الوكيل على أساس الشراء: قيمة الشراء دائن (له)، والمحول له مدين (عليه).
     ...umrahTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `لكم قيمة شراء تأشيرة عمرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
+      return { ref: `U-${r.id}`, kind: "تأشيرة عمرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `قيمة شراء تأشيرة عمرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
     }),
     ...visaTx.map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `لكم قيمة شراء تأشيرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
+      return { ref: `V-${r.id}`, kind: "تأشيرة", date: dt.toISOString(), sortKey: dt.getTime(), description: `قيمة شراء تأشيرة باسم (${r.clientName})`, debit: 0, credit: Number(r.purchasePrice) || 0 };
     }),
     ...visaTx.filter((r) => (Number(r.transferredToAgent) || 0) > 0).map((r) => {
       const dt = toDate(r.issueDate) ?? r.createdAt;
-      return { ref: `T-${r.id}`, kind: "محول للوكيل", date: dt.toISOString(), sortKey: dt.getTime() + 1, description: `عليكم مبلغ محول لكم عن تأشيرة باسم (${r.clientName})`, debit: Number(r.transferredToAgent) || 0, credit: 0 };
+      return { ref: `T-${r.id}`, kind: "محول للوكيل", date: dt.toISOString(), sortKey: dt.getTime() + 1, description: `مبلغ محول لكم عن تأشيرة باسم (${r.clientName})`, debit: Number(r.transferredToAgent) || 0, credit: 0 };
     }),
     ...payments.map((p) => {
       const amount = Number(p.amount) || 0;
@@ -313,8 +313,8 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
         date: p.paidAt.toISOString(),
         sortKey: p.paidAt.getTime(),
         description: isFrom
-          ? `لكم مقابل مبلغ مستلم منكم${p.notes ? ` — ${p.notes}` : ""}`
-          : `عليكم مقابل مبلغ مدفوع لكم${p.notes ? ` — ${p.notes}` : ""}`,
+          ? `مقابل مبلغ مستلم منكم${p.notes ? ` — ${p.notes}` : ""}`
+          : `مقابل مبلغ مدفوع لكم${p.notes ? ` — ${p.notes}` : ""}`,
         debit: isFrom ? 0 : amount,
         credit: isFrom ? amount : 0,
       };
@@ -328,8 +328,8 @@ router.get("/statement/agents/:id", async (req, res): Promise<void> => {
         date: v.voucherDate.toISOString(),
         sortKey: v.voucherDate.getTime(),
         description: isReceipt
-          ? `لكم مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
-          : `عليكم مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
+          ? `مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
+          : `مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
         debit: isReceipt ? 0 : amount,
         credit: isReceipt ? amount : 0,
       };
@@ -739,7 +739,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         kind: r.visaType || "تأشيرة",
         date: dt.toISOString(),
         sortKey: dt.getTime(),
-        description: `عليكم مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
+        description: `مقابل ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
         debit: Number(r.salePrice) || 0,
         credit: 0,
       }];
@@ -750,7 +750,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
           kind: "مقبوضات",
           date: dt.toISOString(),
           sortKey: dt.getTime() + 1,
-          description: `لكم مقابل مبلغ مستلم منكم عن ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
+          description: `مقابل مبلغ مستلم منكم عن ${r.visaType || "تأشيرة"} باسم (${r.clientName})`,
           debit: 0,
           credit: received,
         });
@@ -764,7 +764,7 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         kind: "عمرة",
         date: dt.toISOString(),
         sortKey: dt.getTime(),
-        description: `عليكم مقابل تأشيرة عمرة باسم (${r.clientName})`,
+        description: `مقابل تأشيرة عمرة باسم (${r.clientName})`,
         debit: Number(r.salePrice) || 0,
         credit: 0,
       };
@@ -777,8 +777,8 @@ router.get("/statement/clients/details", async (req, res): Promise<void> => {
         date: v.voucherDate.toISOString(),
         sortKey: v.voucherDate.getTime(),
         description: isReceipt
-          ? `لكم مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
-          : `عليكم مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
+          ? `مقابل مبلغ مستلم منكم بموجب سند قبض${v.description ? ` — ${v.description}` : ""}`
+          : `مقابل مبلغ مصروف لكم بموجب سند صرف${v.description ? ` — ${v.description}` : ""}`,
         debit: isReceipt ? 0 : Number(v.amount) || 0,
         credit: isReceipt ? Number(v.amount) || 0 : 0,
       };
